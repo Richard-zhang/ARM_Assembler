@@ -30,17 +30,38 @@ int main(int argc, char **argv) {
     perror("File not found!");
     }
     
-       
-
     return 0;    
 }
 	
 int branch(uint32_t instr) {
     /* branch is a helper function that contains an 24 bit 2s complement
        offset that will be sign extended and added to "PC" */
+    
+    // extracts offset from the instruction
+    uint32_t offsetStart = 0;
+    uint32_t offsetEnd = 23;
+    uint32_t mask = createMask(offsetEnd, offsetStart);
+
+    int32_t offset = mask & instr;
+    
+    /* offset is shifted left 2 bits to account for the PC being 8 bytes
+       ahead of the instruction that is being executed */  
+    int shift = 2;
+    offset = offset << shift;
+    uint32_t mostSigBitIndex = 25;
+    mask = createMask(mostSigBitIndex, mostSigBitIndex);
+
+    // check most significant bit to see if a sign extension is needed
+    if(mask & offset != 0){
+        uint32_t endOfInstr = 31;
+        uint32_t signExtension = createMask(endOfInstr, mostSigBitIndex);
+        offset = signExtension | mask;
+    }
+    // most significant bit of 0 will not need a sign extension
+    return offset;
 }
 
-uint32_t createMask(uint32_t bot, uint32_t top) {
+uint32_t createMask(uint32_t top, uint32_t bot) {
     /* createMask is a helper function that produces a mask (with correct
        offset) */
     assert(bot <= top); 
