@@ -1,6 +1,6 @@
+#include <stdio.h> 
 #include <stdlib.h>
 #include <stdint.h> 
-#include <stdio.h> 
 #include <assert.h>
 
 int main(int argc, char **argv) {
@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
 
     // Reserving space for main memory 
     uint32_t *mainMem = calloc(MAX_ENTRIES, sizeof(int)); 
-     
+    
     // Declaring the binary file  
     FILE *binFile; 
      
@@ -26,6 +26,8 @@ int main(int argc, char **argv) {
     } else {
     perror("File not found!");
     }
+    
+       
 
     return 0;    
 }
