@@ -18,9 +18,9 @@ struct state {
 /* Selects the bits from a range when given a leftmost and a rightmost bit, 
 and returns the selected bits as a 32-bit int */ 
 uint32_t getBits(int leftmost, int rightmost, uint32_t num) {
-    assert(leftmost >= rightmost && leftmost < numsize(uint32_t) * CHAR_BIT);
+    assert(leftmost >= rightmost);
     int range = leftmost - rightmost;
-    uint32_t mask = (sizeof(char) << (range + sizeof(char)) - sizeof(char); 
+    uint32_t mask = (sizeof(char) << (range + sizeof(char))) - sizeof(char); 
     mask <<= rightmost;
     num &= mask;
     num >>= rightmost;
@@ -102,9 +102,9 @@ int main(int argc, char **argv) {
 
     /* Checks the condition code of the instruction, which specifies whether
     the instruction will be executed or not */ 
-    if (checkCond(cond, *(regFile + CPSRREG)) == 1){
+    //if (checkCond(cond, *(regFile + CPSRREG)) == 1){
         // execute 
-    }
+    
  
     ARMState->decoded = ARMState->fetched; 
     ARMState->fetched = mainMem[*regFile]; 
