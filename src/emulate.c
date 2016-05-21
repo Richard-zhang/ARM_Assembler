@@ -24,6 +24,11 @@ uint32_t arithmeticRightShift(uint32_t amount, uint32_t value);
 uint32_t rotateRight(uint32_t amount, uint32_t value);
 uint32_t getShiftAmount(uint32_t *regFile, uint32_t operand);
 uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand);
+void storeData(uint32_t *mainMem, uint32_t *regFile, 
+    uint32_t source, uint32_t index);
+void loadData(uint32_t *mainMem, uint32_t *regFile, 
+    uint32_t dest, uint32_t index);
+void singleDataTransfer(uint32_t *mainMem, uint32_t *regFile, uint32_t instr);
 uint32_t evaluateImmediateValue(uint32_t operand);
 void setCPSRBit(uint32_t *CPSRreg, uint32_t bit, uint32_t value);
 uint32_t applyOpcode(uint32_t *regFile, uint32_t opcode, uint32_t regN,
@@ -331,14 +336,17 @@ void printState(uint32_t *regFile, uint32_t *mainMem, int memSize) {
     }  
 }
 
+/* Moves each bit to the left by the specified amouunt, extending with 0s */
 uint32_t logicalLeftShift(uint32_t amount, uint32_t value) {
     return (value << amount);
 }
 
+/* Moves each bit to the right by the specified amouunt, extending with 0s */
 uint32_t logicalRightShift(uint32_t amount, uint32_t value) {
     return (value >> amount);
 }
 
+/* Makes an anrithmetic shift, while preserving the sign bit */
 uint32_t arithmeticRightShift(uint32_t amount, uint32_t value) {
     uint32_t leftMostBit = getBits(31, 31, value);
     // Logical right shift
@@ -351,6 +359,7 @@ uint32_t arithmeticRightShift(uint32_t amount, uint32_t value) {
     return shiftedValue;
 }
 
+/* Rotates cyclically the value the amount number of bits */
 uint32_t rotateRight(uint32_t amount, uint32_t value) {
     // Getting the bits to rotate
     uint32_t bitsToRotate = getBits(amount - 1, 0, value);
@@ -362,6 +371,8 @@ uint32_t rotateRight(uint32_t amount, uint32_t value) {
     return (result | bitsToRotate);
 }
 
+/* Given the operand determines the amount to be shifted, taking into account
+    whether it is a constant amount or specified by a register */
 uint32_t getShiftAmount(uint32_t *regFile, uint32_t operand) {
     uint32_t shiftKind = getBits(4, 4, operand);
     uint32_t shiftAmount;
@@ -377,6 +388,8 @@ uint32_t getShiftAmount(uint32_t *regFile, uint32_t operand) {
     return shiftAmount;
 }
 
+/* Given an operand, outputs the value after the shifted register operation
+    is applied to the value in Rm (bits 0 to 3) */
 uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand) {
     // Gets the value on which the shift operations will be applied (Rm)
     uint32_t valueReg = getBits(3, 0, operand);
@@ -394,6 +407,95 @@ uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand) {
         case 2 : return arithmeticRightShift(shiftAmount, shiftValue);
         default: assert(shiftType == 3);
                  return rotateRight(shiftAmount, shiftValue);
+    }
+}
+
+/* Helper function for single data transfer that stores the data from the source
+    register to the main memory and changes the endiannes of the data */
+void storeData(uint32_t *mainMem, uint32_t *regFile, 
+    uint32_t source, uint32_t index)
+{
+    uint32_t data = switchEndian(regFile[source]);
+    mainMem[index] = data;
+}
+
+/* Helper function for single data transfer that loads the data from the main
+    memory into the dest register and changes the endiannes of the data */
+void loadData(uint32_t *mainMem, uint32_t *regFile, 
+    uint32_t dest, uint32_t index)
+{
+    uint32_t data = switchEndian(mainMem[index]);
+    regFile[dest] = data;
+}
+
+/* This function is used to do single data transfers. The instuction determines
+    whether it is a load or a store and the offset for the base register */
+void singleDataTransfer(uint32_t *mainMem, uint32_t *regFile, uint32_t instr) {
+    // Initialise the offset
+    uint32_t offset = getBits(11, 0, instr);
+    // Get the Immediate offset(I) bits
+    uint32_t offsetBits = getBits(25, 25, instr);
+    // If the Immediate offset flag is set, get the shited register value
+    if (offsetBits != 0) {
+        offset = evaluateShiftedReg(regFile, offset);
+    }
+    
+    // Get the up bit
+    uint32_t upBit = getBits(23, 23, instr);
+    
+    //Get load/store bit
+    uint32_t loadStoreBit = getBits(20, 20, instr);
+    
+    // Get the base register (Rn)
+    uint32_t baseReg = getBits(19, 16, instr);
+
+    // Get the destination register
+    uint32_t destReg = getBits(15, 12, instr);
+    
+    // Set the baseReg index
+    uint32_t index = regFile[baseReg];
+    if (baseReg == PC) {
+        index -= 2;
+    }
+
+    // Get the Pre/Post indexing bit
+    uint32_t pIndexingBit = getBits(24, 24, instr);
+    if (pIndexingBit != 0) {
+    // Pre indexing
+        if (upBit != 0) {
+            // Offset is added to index
+            index += offset;
+        } else {
+            // Offset is subtracted from index
+            index -= offset;
+        }
+        if (loadStoreBit == 0) {
+            storeData(mainMem, regFile, destReg, index);
+        } else {
+            loadData(mainMem, regFile, destReg, index);
+        }
+    } else {
+    // Post indexing
+        // In a post-indexing have to check that Rm and Rn are not the same
+        if (offsetBits != 0) {
+            // Get Rm (offset register)
+            uint32_t offsetReg = getBits(3, 0, instr);
+            assert (offsetReg != baseReg);
+        }
+        if (loadStoreBit == 0) {
+            storeData(mainMem, regFile, destReg, index);
+        } else {
+            loadData(mainMem, regFile, destReg, index);
+        }
+
+        // Check up bit
+        if (upBit != 0) {
+            // Offset is added to base reg
+            regFile[baseReg] += offset;
+        } else {
+            // Offset is subtracted from base reg
+            regFile[baseReg] -= offset;
+        }
     }
 }
 
