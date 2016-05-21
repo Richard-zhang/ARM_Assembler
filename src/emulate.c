@@ -4,8 +4,8 @@
 #include <assert.h>
 #define CPSR 16
 #define PC 15
-#define NUM_REG 17; 
-#define GEN_REG 13; 
+#define NUM_REG 17 
+#define GEN_REG 13 
 uint32_t createMask(uint32_t top, uint32_t bot);
 int branch(uint32_t instr);
 int checkCond(uint32_t cond, uint32_t CPSRpntr);
@@ -301,7 +301,7 @@ uint32_t createMask(uint32_t top, uint32_t bot) {
     return mask;
 }
 
-void printState(uint32_t *regFile, uint32_t *mainMem) { 
+void printState(uint32_t *regFile, uint32_t *mainMem, int memSize) { 
     int i; 
     for (i = 0; i < GEN_REG; i++) { 
         printf("%i  :          %i (%x)\n", i, regFile[i], regFile[i]);  
@@ -310,6 +310,10 @@ void printState(uint32_t *regFile, uint32_t *mainMem) {
     printf("PC  :          %i (%x)\n", regFile[15], regFile[15]);
     printf("CPSR:          %i (%x)\n", regFile[16], regFile[16]);
     printf("Non-zero memory:"); 
+    
+    for (i = 0; i < memSize; i++) { 
+        printf("%x: %x\n", i, mainMem[i]); 
+    }  
 }
 
 
