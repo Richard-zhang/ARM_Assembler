@@ -64,7 +64,7 @@ int equalityNV(uint32_t CPSRpntr) {
        N = C. Returns 0 if N != C */
     int N = getBits(31, 31, CPSRpntr);
     int V = getBits(28, 28, CPSRpntr);
-    return N == V;
+    return (N & V);
 }
 	
 int branch(uint32_t instr) {
@@ -72,21 +72,19 @@ int branch(uint32_t instr) {
        offset that will be sign extended and added to "PC" */
     
     // extracts offset from the instruction
-    uint32_t offsetStart = 0;
-    uint32_t offsetEnd = 23;
-    uint32_t mask = createMask(offsetEnd, offsetStart);
-
-    int32_t offset = mask & instr;
+    int32_t offset = getBits(23, 0, instr);
     
     /* offset is shifted left 2 bits to account for the PC being 8 bytes
        ahead of the instruction that is being executed */  
     int shift = 2;
-    offset = offset << shift;
-    uint32_t mostSigBitIndex = 25;
-    mask = createMask(mostSigBitIndex, mostSigBitIndex);
+    offset <<= shift;
+   // uint32_t mostSigBitIndex = 25;
+   // mask = createMask(mostSigBitIndex, mostSigBitIndex);
+    
+    mostSigBitIndex = getBits(25, 25, offset);
 
     // check most significant bit to see if a sign extension is needed
-    if(mask & offset != 0){
+    if(mostSigBitIndex == 1){
         uint32_t endOfInstr = 31;
         uint32_t signExtension = createMask(endOfInstr, mostSigBitIndex);
         offset = signExtension | mask;
