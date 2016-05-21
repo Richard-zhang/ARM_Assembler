@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <assert.h>
 
-uint32_t createMask(uint32_t bot, uint32_t top);
+uint32_t createMask(uint32_t top, uint32_t bot);
 int branch(uint32_t instr);
 int checkCond(uint32_t cond, uint32_t CPSRpntr);
 int checkZ(uint32_t CPSRpntr);
@@ -158,19 +158,19 @@ int branch(uint32_t instr) {
    // uint32_t mostSigBitIndex = 25;
    // mask = createMask(mostSigBitIndex, mostSigBitIndex);
     
-    mostSigBitIndex = getBits(25, 25, offset);
+    uint32_t mostSigBitIndex = getBits(25, 25, offset);
 
     // check most significant bit to see if a sign extension is needed
     if(mostSigBitIndex == 1){
         uint32_t endOfInstr = 31;
-        uint32_t signExtension = createMask(endOfInstr, mostSigBitIndex);
-        offset = signExtension | mask;
+        uint32_t signExtension = createMask(mostSigBitIndex, endOfInstr);
+        offset = signExtension | mostSigBitIndex;
     }
     // most significant bit of 0 will not need a sign extension
     return offset;
 }
 
-uint32_t createMask(uint32_t bot, uint32_t top) {
+uint32_t createMask(uint32_t top, uint32_t bot) {
     /* createMask is a helper function that produces a mask (with correct
        offset) */
     assert(bot <= top); 
