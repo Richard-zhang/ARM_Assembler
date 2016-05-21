@@ -29,6 +29,15 @@ void storeData(uint32_t *mainMem, uint32_t *regFile,
 void loadData(uint32_t *mainMem, uint32_t *regFile, 
     uint32_t dest, uint32_t index);
 void singleDataTransfer(uint32_t *mainMem, uint32_t *regFile, uint32_t instr);
+uint32_t evaluateImmediateValue(uint32_t operand);
+void setCPSRBit(uint32_t *CPSRreg, uint32_t bit, uint32_t value);
+uint32_t applyOpcode(uint32_t *regFile, uint32_t opcode, uint32_t regN,
+                     uint32_t op2);
+uint32_t getCarryFromShifter(uint32_t *regFile, uint32_t op2);
+uint32_t isOverflow(uint32_t int1, uint32_t int2);
+uint32_t getCarryFromALU(uint32_t *regFile, uint32_t instr, uint32_t op2,
+                         uint32_t *CPSRreg);
+void dataProcessInstr(uint32_t *regFile, uint32_t instr);
 
 struct state {
     uint32_t decoded;
@@ -135,7 +144,7 @@ int main(int argc, char **argv) {
     }
 
 
-    // PRINT STATE OF MEMORY/REGISTERS                                                   
+    // PRINT STATE OF MEMORY/REGISTERS                                         
     return 0;    
 }
 
@@ -486,5 +495,208 @@ void singleDataTransfer(uint32_t *mainMem, uint32_t *regFile, uint32_t instr) {
     }
 }
 
+uint32_t evaluateImmediateValue(uint32_t operand) {
+    /* This function is called by the data processing instruction if the
+       immediate operand bit (bit 25) of the instruction is set. The function
+       takes an 8 bit immediate value (bits 0 - 7) and rotates it by twice 
+       the value of the rotate bits (bits 8-11). */
 
+    // the rotate value must be a multiple of 2
+    uint32_t rotateValue = getBits(11, 8, operand);
+
+    /* the immediate value does not need to be zero-extended as it is declared
+       as a uint32_t */
+    uint32_t immValue = getBits(0, 7, operand);
     
+    // any rotation amount is twice the value in the 4 bit rotate field
+    rotateValue <<= 2;
+
+    // the immediate value is rotated right by rotateValue
+    immValue >>= rotateValue;
+
+    return immValue;
+}
+
+void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
+    /* This function is called by the main. If the immediate operand is set
+       then operand2 is an immediate value. If immediate operand is clear then
+       operand2 is a register. Also sets flags depending on the S bit(bit 20)
+       of the instruction. */
+
+    // create a pointer to the CPSR register.
+    uint32_t *CPSRreg = regFile + CPSR;
+    
+    // get the 25th bit of the instruction (immediate operand bit)
+    uint32_t immOp = getBits(25, 25, instr);
+
+    // get the 20th bit of the instruction (set condition bit)
+    uint32_t set = getBits(20, 20, instr);
+
+    // get the operand2 of the instruction
+    uint32_t op2 = getBits(11, 0, instr);
+
+    if(immOp != 0) {
+    // if the immediate operand bit is 1. op2 is an immediate value
+        op2 = evaluateImmediateValue(op2);
+    } else {
+    // else, the immediate operand bit is 0. op2 is a register
+        op2 = evaluateShiftedReg(regFile, op2);
+    }
+  
+    // get the opcode from the instruction, and regN from instruction
+    uint32_t opcode = getBits(24, 21, instr);
+    uint32_t regN = getBits(19, 16, instr);
+
+    // result from applying opcode
+    uint32_t result = applyOpcode(regFile, opcode, regN, op2);
+    
+    // the register to put result into
+    uint32_t destReg = getBits(15, 12, instr);
+   
+    if(opcode < 8 || opcode > 10) {
+        regFile[destReg] = result;
+    }
+    
+    if(set != 0) {
+        // V bit of CPSR is not altered
+    
+        uint32_t carry;
+        /* C bit of CPSR is altered according to the type of shift
+           (left or right) */
+        if(immOp == 0) {
+            // op2 was a register
+            switch(opcode) {
+                case 0  :
+                case 1  :
+                case 8  :
+                case 9  :
+                case 12 :
+                case 13 : carry = getCarryFromShifter(regFile, op2); break;
+                case 2  :
+                case 3  :
+                case 4  :
+                case 10 : carry = getCarryFromALU(regFile, instr, op2, CPSRreg);
+                          break;
+                default : perror("The opcode entered was not valid, carry\
+                              not produced.");
+            }
+        } else {
+            // op2 was an immediate value
+            uint32_t shiftAmount = getBits(11, 8, instr);
+            uint32_t imm = getBits(7, 0, instr);
+            shiftAmount <<= 2;
+        
+            // set correct shiftAmount for right rotations
+            shiftAmount -= 1;
+            carry = getBits(shiftAmount, shiftAmount, imm);        
+        }
+    
+        // set C flag (bit 29)
+        setCPSRBit(CPSRreg, 29, carry);    
+
+        if(result == 0) {
+            // set Z flag (bit 30)
+            setCPSRBit(CPSRreg, 30, 1);
+        }
+
+        // set N flag (bit 31)
+        int32_t bit31 = getBits(31, 31, result);
+        setCPSRBit(CPSRreg, 31, bit31);
+    }
+}
+
+uint32_t getCarryFromALU(uint32_t *regFile, uint32_t instr, uint32_t op2,
+                         uint32_t *CPSRreg) 
+{
+    uint32_t opcode = getBits(24, 21, instr);
+    assert(opcode == 2 || opcode == 3 || opcode == 4 || opcode == 10);
+
+    uint32_t regN = getBits(19, 16, instr);
+    uint32_t op1 = regFile[regN];
+
+    if(opcode == 4) {
+        // if add
+        if(isOverflow(op1, op2) == 1) {
+            // overflow occured
+            return 1;
+        }
+    } else if(opcode == 2 || opcode == 10) {
+        // if sub or cmp
+        if(op1 > op2) {
+            return 1;
+        }
+    } else if(opcode == 3) {
+        // if rsb
+        if(op2 > op1) {
+            return 1;
+        }
+    }
+    return 0;        
+}
+
+uint32_t isOverflow(uint32_t int1, uint32_t int2) {
+    if((int2 > 0) && (int1 > (sizeof(uint32_t) - int2))){
+        return 1;
+    }
+
+    return 0;
+} 
+
+uint32_t getCarryFromShifter(uint32_t *regFile, uint32_t op2) {
+    uint32_t shiftType = getBits(6, 5, op2);
+    uint32_t shiftAmount = getShiftAmount(regFile, op2);    
+    uint32_t carry;
+    uint32_t regM = getBits(3, 0, op2);
+
+    if(shiftAmount == 0) {
+        // there was not shift, hence no carry
+        return 0;
+    }
+
+    if(shiftType == 0) {
+        // shiftType is logical shift left, so add one to shiftAmount
+        shiftAmount += 1;
+        carry = getBits(shiftAmount, shiftAmount, regFile[regM]);
+    } else {
+        // shiftType is a right shift, so subtract one from shiftAmount
+        shiftAmount -= 1;
+        carry = getBits(shiftAmount, shiftAmount, regFile[regM]);
+    }
+
+    return carry;
+}
+
+uint32_t applyOpcode(uint32_t *regFile, uint32_t opcode, uint32_t regN,
+                     uint32_t op2)
+{
+    assert(opcode <= 13);
+    
+    switch(opcode) {
+        case 0  : 
+        case 8  : return regFile[regN] & op2;
+        case 1  :
+        case 9  : return regFile[regN] ^ op2;
+        case 2  : 
+        case 10 : return regFile[regN] - op2;
+        case 3  : return op2 - regFile[regN];
+        case 4  : return regFile[regN] + op2;
+        case 12 : return regFile[regN] | op2;
+        default : assert(opcode == 13);
+                  return op2;
+    } 
+}
+
+void setCPSRBit(uint32_t *CPSRreg, uint32_t bit, uint32_t value) {
+    /* This function is called to set the specified bit of CPSR register
+       to the given value */
+    assert(bit <= 31 && bit >= 28);
+    assert(value == 0 || value == 1);
+   
+    uint32_t mask = createMask(bit, bit);
+ 
+    if(value == 0) {
+        // invert the mask
+        mask = ~mask;
+    }    
+    *CPSRreg &= mask;   
+}       
