@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     assert(argc == 2); 
     
     // The number of the CPSR register 
-    const int CPSRREG = 16; 
+    // const int CPSRREG = 16; 
 
     // The maximum capacity of the ARM machine memory is 64KB
     const int MAX_SIZE = 65536;
@@ -155,16 +155,15 @@ int branch(uint32_t instr) {
        ahead of the instruction that is being executed */  
     int shift = 2;
     offset <<= shift;
-   // uint32_t mostSigBitIndex = 25;
-   // mask = createMask(mostSigBitIndex, mostSigBitIndex);
     
-    uint32_t mostSigBitIndex = getBits(25, 25, offset);
+    uint32_t mostSigBit = getBits(25, 25, offset);
 
     // check most significant bit to see if a sign extension is needed
-    if(mostSigBitIndex == 1){
+    if(mostSigBit == 1){
         uint32_t endOfInstr = 31;
-        uint32_t signExtension = createMask(mostSigBitIndex, endOfInstr);
-        offset = signExtension | mostSigBitIndex;
+        uint32_t mostSigBitIndex = 25;
+        uint32_t signExtension = createMask(endOfInstr, mostSigBitIndex);
+        offset = signExtension | offset;
     }
     // most significant bit of 0 will not need a sign extension
     return offset;
