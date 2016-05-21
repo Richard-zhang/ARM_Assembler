@@ -4,8 +4,9 @@
 #include <assert.h>
 #define CPSR 16
 #define PC 15
-#define NUM_REG 17; 
-#define GEN_REG 13; 
+#define NUM_REG 17
+#define GEN_REG 13
+
 uint32_t createMask(uint32_t top, uint32_t bot);
 int branch(uint32_t instr);
 int checkCond(uint32_t cond, uint32_t CPSRpntr);
@@ -17,7 +18,12 @@ void mult(uint32_t *regFile, uint32_t instr);
 int checkCaseTwo(uint32_t instr);
 int checkCaseOne(uint32_t instr);
 int checkInstruction(uint32_t instr);
-
+uint32_t logicalLeftShift(uint32_t amount, uint32_t value);
+uint32_t logicalRightShift(uint32_t amount, uint32_t value);
+uint32_t arithmeticRightShift(uint32_t amount, uint32_t value);
+uint32_t rotateRight(uint32_t amount, uint32_t value);
+uint32_t getShiftAmount(uint32_t *regFile, uint32_t operand);
+uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand);
 
 struct state {
     uint32_t decoded;
@@ -312,6 +318,71 @@ void printState(uint32_t *regFile, uint32_t *mainMem) {
     printf("Non-zero memory:"); 
 }
 
+uint32_t logicalLeftShift(uint32_t amount, uint32_t value) {
+    return (value << amount);
+}
+
+uint32_t logicalRightShift(uint32_t amount, uint32_t value) {
+    return (value >> amount);
+}
+
+uint32_t arithmeticRightShift(uint32_t amount, uint32_t value) {
+    uint32_t leftMostBit = getBits(31, 31, value);
+    // Logical right shift
+    uint32_t shiftedValue = (value >> amount);
+    if (leftMostBit != 0) {
+        // Need to sign extend it
+        uint32_t mask = createMask(31, 31 - amount + 1);
+        shiftedValue |= mask;
+    }
+    return shiftedValue;
+}
+
+uint32_t rotateRight(uint32_t amount, uint32_t value) {
+    // Getting the bits to rotate
+    uint32_t bitsToRotate = getBits(amount - 1, 0, value);
+    // Moving the bits to the begginning
+    bitsToRotate <<= (32 - amount);
+    // Logical right shift of value
+    uint32_t result = value >> amount;
+    // Doing a bit-wise or to insert the bits to rotate
+    return (result | bitsToRotate);
+}
+
+uint32_t getShiftAmount(uint32_t *regFile, uint32_t operand) {
+    uint32_t shiftKind = getBits(4, 4, operand);
+    uint32_t shiftAmount;
+    if (shiftKind == 0) {
+        // Initialise shiftAmount as the constant
+        shiftAmount = getBits(11, 7, operand);
+    } else {
+        // Change shiftAmount to the last byte in the shift Reg
+        uint32_t shiftReg = getBits(11, 8, operand);
+        uint32_t shiftRegValue = regFile[shiftReg];
+        shiftAmount = getBits(7, 0, shiftRegValue);
+    }
+    return shiftAmount;
+}
+
+uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand) {
+    // Gets the value on which the shift operations will be applied (Rm)
+    uint32_t valueReg = getBits(3, 0, operand);
+    uint32_t shiftValue = regFile[valueReg];
+    
+    // Gets the amount to be shifted
+    uint32_t shiftAmount = getShiftAmount(regFile, operand);
+
+    // Get the shift type
+    uint32_t shiftType = getBits(6, 5, operand);
+    
+    switch (shiftType) {
+        case 0 : return logicalLeftShift(shiftAmount, shiftValue);
+        case 1 : return logicalRightShift(shiftAmount, shiftValue);
+        case 2 : return arithmeticRightShift(shiftAmount, shiftValue);
+        default: assert(shiftType == 3);
+                 return rotateRight(shiftAmount, shiftValue);
+    }
+}
 
 
 
