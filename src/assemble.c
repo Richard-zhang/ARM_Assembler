@@ -15,32 +15,40 @@ struct entry {
 
 //data processing instruction format
 struct dpi {
-    unsigned int cond : 4;
-    unsigned int iden : 2;
-    unsigned int i : 1;
-    unsigned int opcode : 4;
-    unsigned int s : 1;
-    unsigned int rn : 4;
-    unsigned int rd : 4;
+    unsigned int cond    : 4;
+    unsigned int iden    : 2;
+    unsigned int i       : 1;
+    unsigned int opcode  : 4;
+    unsigned int s       : 1;
+    unsigned int rn      : 4;
+    unsigned int rd      : 4;
     unsigned int operand : 12;
 };
 
+//API for convert data processing instruction to binary file
 
+//write the output binary file using the struct dpi returned
+//by the struct dpi *convert(char *)
 
+void dpiToBin(struct dpi *, FILE *);
 
-//change the big endian to small endian
+//conver the data processing ins
+struct dpi *convert(char *);
+
+//followings are helper function of struct dpi *conver(char *)
+
+//change the big endian to small endian memory
 void endianConvert(unsigned char *);
 void swap(unsigned char *, unsigned char *);
-
 //get the decimal number of opcode
 int  getOpVal(char *);
-
-//API for convert data processing instruction to binary file
-struct dpi *convert(char *);
+//set up I field and Operand field
 void setIflagAndOper(struct dpi *, char *);
+//set up desitination regesiter field
 void setRd(struct dpi *, char *);
+//set up first operand register
 void setRn(struct dpi *, char *);
-void dpiToBin(struct dpi *, FILE *);
+
 
 //API for hashtable
 unsigned int has(char *);
@@ -50,6 +58,8 @@ struct entry *put(char *, char *);
 //error handling check if there is enough space for malloc
 void isEnoughSpace(void *);
 
+
+//main function
 int main(int argc, char **argv) {
     //create a symbol table
     put("and", "0000");
@@ -63,24 +73,20 @@ int main(int argc, char **argv) {
     put("teq", "1001");
     put("cmp", "1010");
 
-
-
-
-    //reading soruce file
+    //reading soruce file and creating output file
     char *inname  = argv[1];
     char *outname = argv[2];
     FILE *inFile;
     FILE *outFile;
-
     char lineBuffer[MAXLINE];
-
+    //initilize the files
     inFile    = fopen(inname, "r");
     outFile   = fopen(outname, "wb");
-
+    //error handling for inFile
     if (inFile == NULL) {
         exit(EXIT_FAILURE);
     }
-
+    //IO
     while (fgets(lineBuffer, MAXLINE, inFile)) {
         struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
         isEnoughSpace(ins);
@@ -88,9 +94,6 @@ int main(int argc, char **argv) {
         ins = convert(lineBuffer);
         dpiToBin(ins, outFile);
 
-
-
-        //gc
         free(ins);
     }
 
@@ -99,10 +102,6 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-
-
-
-
 
 //dataProcessingConverter
 void endianConvert(unsigned char *ip) {
@@ -116,13 +115,11 @@ void swap(unsigned char *first, unsigned char *end) {
     *end   = temp;
 }
 
-
 struct dpi *convert(char *str) {
     char *test = str;
     char *opcode, *rd, *rn, *op2;
     struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
     isEnoughSpace(ins);
-
 
     opcode = strtok_r(test, " ", &test);
 
@@ -179,7 +176,6 @@ struct dpi *convert(char *str) {
 
             break;
     }
-
 
     return ins;
 }
@@ -248,10 +244,6 @@ void dpiToBin(struct dpi *ins, FILE *file) {
 
     free(start);
 }
-
-
-
-
 
 unsigned int hash(char *s) {
     unsigned int hashval;
