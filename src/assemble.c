@@ -4,89 +4,54 @@
 #define MAXLINE 32
 #define HASHSIZE 101
 
+//create hash table and entry for hashtable
+static struct entry *hashTable[HASHSIZE];
 
-//hashtable
 struct entry {
     struct entry *next;
     char *name;
     char *defn;
 };
 
-static struct entry *hashTable[HASHSIZE];
-
-unsigned int hash(char *s) {
-    unsigned int hashval;
-
-    for (hashval = 0; *s != '\0'; s++) {
-        hashval = *s + 31 * hashval;
-    }
-
-    return hashval % HASHSIZE;
-}
-
-struct entry *lookup(char *s) {
-    struct entry *np;
-    for (np = hashTable[hash(s)]; np != NULL; np = np->next) {
-        if (strcmp(s, np->name) == 0) {
-            return np;
-        }
-    }
-
-    return NULL;
-}
-
-struct entry *put(char *name, char *defn) {
-    struct entry *np;
-    unsigned int hashval;
-
-    if ((np = lookup(name)) == NULL) {
-        np = (struct entry *) malloc(sizeof(*np));
-        if (np == NULL || (np->name = strdup(name)) == NULL) {
-            return NULL;
-        }
-
-        hashval = hash(name);
-        np->next = hashTable[hashval];
-        hashTable[hashval] = np;
-    } else {
-        free((void *) np->defn);
-    }
-
-    if ((np->defn = strdup(defn)) == NULL) {
-        return NULL;
-    }
-
-    return np;
-}
-
-//instruction
+//data processing instruction format
 struct dpi {
-    int cond    : 4;
-    int iden    : 2;
-    int i       : 1;
-    int opcode  : 4;
-    int s       : 1;
-    int rn      : 4;
-    int rd      : 4;
-    int operand : 12;
+    unsigned int cond : 4;
+    unsigned int iden : 2;
+    unsigned int i : 1;
+    unsigned int opcode : 4;
+    unsigned int s : 1;
+    unsigned int rn : 4;
+    unsigned int rd : 4;
+    unsigned int operand : 12;
 };
 
 
-//tokenizer
 
 
-void endianConvert(char *);
-void swap(char *, char *);
+//change the big endian to small endian
+void endianConvert(unsigned char *);
+void swap(unsigned char *, unsigned char *);
+
+//get the decimal number of opcode
 int  getOpVal(char *);
+
+//API for convert data processing instruction to binary file
 struct dpi *convert(char *);
 void setIflagAndOper(struct dpi *, char *);
 void setRd(struct dpi *, char *);
 void setRn(struct dpi *, char *);
+void dpiToBin(struct dpi *, FILE *);
 
+//API for hashtable
+unsigned int has(char *);
+struct entry *lookup(char *);
+struct entry *put(char *, char *);
 
+//error handling check if there is enough space for malloc
+void isEnoughSpace(void *);
 
 int main(int argc, char **argv) {
-    /* create a symbol table */
+    //create a symbol table
     put("and", "0000");
     put("eor", "0001");
     put("sub", "0010");
@@ -101,7 +66,7 @@ int main(int argc, char **argv) {
 
 
 
-    /* reading source file */
+    //reading soruce file
     char *inname  = argv[1];
     char *outname = argv[2];
     FILE *inFile;
@@ -116,24 +81,36 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    while(fgets(lineBuffer, MAXLINE, inFile)) {
+    while (fgets(lineBuffer, MAXLINE, inFile)) {
+        struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
+        isEnoughSpace(ins);
+
+        ins = convert(lineBuffer);
+        dpiToBin(ins, outFile);
 
 
 
+        //gc
+        free(ins);
     }
 
     fclose(outFile);
     fclose(inFile);
+
     return 0;
 }
 
+
+
+
+
 //dataProcessingConverter
-void endianConvert(char *ip) {
+void endianConvert(unsigned char *ip) {
     swap(ip, ip + 3);
     swap(ip + 1, ip + 2);
 }
 
-void swap(char *first, char *end) {
+void swap(unsigned char *first, unsigned char *end) {
     char temp = *first;
     *first = *end;
     *end   = temp;
@@ -144,13 +121,15 @@ struct dpi *convert(char *str) {
     char *test = str;
     char *opcode, *rd, *rn, *op2;
     struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
+    isEnoughSpace(ins);
+
 
     opcode = strtok_r(test, " ", &test);
 
     int opc     = getOpVal(opcode);
     ins->opcode = opc;
     ins->s = 0;
-    ins->cond = 10;
+    ins->cond = 14;
 
     switch (opc) {
         case 13: //mov ->  mov Rd, <Operand2>
@@ -242,4 +221,86 @@ void setIflagAndOper(struct dpi *ins, char *str) {
 
     ins->i = iflag;
     ins->operand = ope2;
+}
+
+void dpiToBin(struct dpi *ins, FILE *file) {
+    unsigned char *start;
+    start =(unsigned char *) calloc(4, sizeof(unsigned char));
+    isEnoughSpace(start);
+
+    *start |= ins -> cond << 4;
+    *start |= ins -> iden << 2;
+    *start |= ins -> i << 1;
+    *start |= ins -> opcode >> 3;
+
+    *(start+1) |= (ins->opcode << 1) << 4;
+    *(start+1) |= ins->s << 4;
+    *(start+1) |= ins->rn;
+
+    *(start+2) |= ins->rd << 4;
+    *(start+2) |= ins->operand >> 8;
+
+
+    *(start+3) |= ins->operand;
+
+    endianConvert(start);
+    fwrite(start, sizeof(unsigned char), 4, file);
+
+    free(start);
+}
+
+
+
+
+
+unsigned int hash(char *s) {
+    unsigned int hashval;
+
+    for (hashval = 0; *s != '\0'; s++) {
+        hashval = *s + 31 * hashval;
+    }
+
+    return hashval % HASHSIZE;
+}
+
+struct entry *lookup(char *s) {
+    struct entry *np;
+    for (np = hashTable[hash(s)]; np != NULL; np = np->next) {
+        if (strcmp(s, np->name) == 0) {
+            return np;
+        }
+    }
+
+    return NULL;
+}
+
+struct entry *put(char *name, char *defn) {
+    struct entry *np;
+    unsigned int hashval;
+
+    if ((np = lookup(name)) == NULL) {
+        np = (struct entry *) malloc(sizeof(*np));
+        if (np == NULL || (np->name = strdup(name)) == NULL) {
+            return NULL;
+        }
+
+        hashval = hash(name);
+        np->next = hashTable[hashval];
+        hashTable[hashval] = np;
+    } else {
+        free((void *) np->defn);
+    }
+
+    if ((np->defn = strdup(defn)) == NULL) {
+        return NULL;
+    }
+
+    return np;
+}
+
+void isEnoughSpace(void *ip) {
+    if (ip == NULL) {
+        fprintf(stderr, "Out of memory, exiting\n");
+        exit(1);
+    }
 }
