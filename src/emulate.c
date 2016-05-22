@@ -67,11 +67,6 @@ uint32_t switchEndian(uint32_t num) {
     return a | b | c | d;
 }
 
-// returns the value of a register given the number of the register 
-uint32_t accessReg(uint32_t *regFile, int reg){
-    return regFile[reg];     
-}
-
 int main(int argc, char **argv) {
     assert(argc == 2); 
     
@@ -113,12 +108,11 @@ int main(int argc, char **argv) {
     then decoded.*/
     
     ARMState->fetched = *mainMem;       
-    regFile[PC] += sizeof(int); 
-   
+    regFile[PC] += sizeof(char); 
+ 
     ARMState->decoded = ARMState->fetched; 
     ARMState->fetched = mainMem[regFile[PC]];    
-    regFile[PC] += sizeof(int);  
-
+    regFile[PC] += sizeof(char);  
     uint32_t condReg;    
   
         
@@ -126,40 +120,38 @@ int main(int argc, char **argv) {
     // Start of infinite loop 
     for(;;) {
   
-        uint32_t instrBigEndian = switchEndian(ARMState->decoded);
-
         // If instruction is 0, halt the program (break out of for loop) 
         if (ARMState->decoded == 0) {
-            regFile[PC] += sizeof(int); 
             break;
         } 
 
         /* Checks the condition code of the instruction, which specifies whether
            the instruction will be executed or not */ 
-        condReg = getBits(31, 28, ARMState->decoded); 
+        condReg = getBits(31, 28, ARMState->decoded);  
         if (checkCond(condReg, *(regFile + CPSR)) == 1){
-            int instrType = checkInstruction(instrBigEndian);
+            int instrType = checkInstruction(ARMState->decoded);
             switch(instrType) {
                 case 0  :
-                    dataProcessInstr(regFile, instrBigEndian);  
+                    dataProcessInstr(regFile, ARMState->decoded);  
                     break; 
                 case 1  : 
-                    mult(regFile, instrBigEndian); 
+                    mult(regFile, ARMState->decoded); 
                     break;  
                 case 2  :
-                    singleDataTransfer(mainMem, regFile, instrBigEndian); 
+                    singleDataTransfer(mainMem, regFile, ARMState->decoded); 
                     break; 
                 default :    
                     assert(instrType == 3); 
-                    int offset = branch(instrBigEndian); 
-                    *(regFile + PC) = *(regFile + PC) + offset;   
+                    int offset = branch(ARMState->decoded); 
+                    regFile[PC] = regFile[PC] + (offset>>2);   
                     // TODO:: Next instruction is ignored.
                     break;   
             }    
         } 
+
         ARMState->decoded = ARMState->fetched; 
         ARMState->fetched = mainMem[*(regFile + PC)]; 
-        regFile[PC] += sizeof(int);   
+        regFile[PC] += sizeof(char);   
     }
 
     // PRINT STATE OF MEMORY/REGISTERS
@@ -345,12 +337,12 @@ void printState(uint32_t *regFile, uint32_t *mainMem, int memSize) {
         printf("%i\t:  %i (0x%08x)\n", i, regFile[i], regFile[i]);  
     }
     
-    printf("PC  :          %i (0x%08x)\n", regFile[15], regFile[15]);
+    printf("PC  :          %i (0x%08x)\n", regFile[15] * 4, regFile[15] * 4);
     printf("CPSR:          %i (0x%08x)\n", regFile[16], regFile[16]);
     printf("Non-zero memory:\n");
     for (i = 0; i < memSize; i++) {
         if (mainMem[i] != 0) {
-            printf("0x%08x: 0x%x\n", i * 4, mainMem[i]);
+            printf("0x%08x: 0x%x\n", i * 4, switchEndian(mainMem[i]));
         }
     }
 }
@@ -528,7 +520,7 @@ uint32_t evaluateImmediateValue(uint32_t operand) {
 
     /* the immediate value does not need to be zero-extended as it is declared
        as a uint32_t */
-    uint32_t immValue = getBits(0, 7, operand);
+    uint32_t immValue = getBits(7, 0, operand);
     
     // any rotation amount is twice the value in the 4 bit rotate field
     rotateValue <<= 2;
@@ -549,10 +541,10 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
     
     // get the 25th bit of the instruction (immediate operand bit)
     uint32_t immOp = getBits(25, 25, instr);
-
+  
     // get the 20th bit of the instruction (set condition bit)
     uint32_t set = getBits(20, 20, instr);
-
+    
     // get the operand2 of the instruction
     uint32_t op2 = getBits(11, 0, instr);
 
