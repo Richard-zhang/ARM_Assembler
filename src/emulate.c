@@ -39,6 +39,7 @@ uint32_t isOverflow(uint32_t int1, uint32_t int2);
 uint32_t getCarryFromALU(uint32_t *regFile, uint32_t instr, uint32_t op2,
                          uint32_t *CPSRreg);
 void dataProcessInstr(uint32_t *regFile, uint32_t instr);
+void printState(uint32_t *regFile, uint32_t *mainMem, int memSize);
 
 struct state {
     uint32_t decoded;
@@ -111,41 +112,58 @@ int main(int argc, char **argv) {
     /* The pipeline begins its execution. The first instruction is fetched and 
     then decoded.*/
     
-    ARMState->decoded = mainMem[0];       
+    ARMState->fetched = *mainMem;       
+    regFile[PC] += sizeof(int); 
    
-    uint32_t condReg;    
+    ARMState->decoded = ARMState->fetched; 
+    ARMState->fetched = mainMem[regFile[PC]];    
+    regFile[PC] += sizeof(int);  
 
-    // infinite loop 
+    uint32_t condReg;    
+  
+        
+    
+    // Start of infinite loop 
     for(;;) {
   
-      // Checks if 
-      if(ARMState->decoded == 0) {
+        uint32_t instrBigEndian = switchEndian(ARMState->decoded);
+
+        // If instruction is 0, halt the program (break out of for loop) 
+        if (ARMState->decoded == 0) {
+            regFile[PC] += sizeof(int); 
             break;
         } 
 
-    /* Checks the condition code of the instruction, which specifies whether
-    the instruction will be executed or not */ 
-    
-    condReg = getBits(31, 28, ARMState->decoded); 
-    if (checkCond(condReg, *(regFile + CPSR)) == 1){
-        int instr = checkInstruction(switchEndian(ARMState->decoded));
-        switch (instr) {
-            case 0  : break; 
-            case 1  : mult(regFile, switchEndian(ARMState->decoded)); break;  
-            case 2  : break; 
-            default : assert(instr == 3); break;   
-        }    
-    } 
-    
- 
-    ARMState->decoded = ARMState->fetched; 
-    ARMState->fetched = mainMem[*regFile]; 
-    *(regFile + PC) = *(regFile + PC) + 1;     
-
+        /* Checks the condition code of the instruction, which specifies whether
+           the instruction will be executed or not */ 
+        condReg = getBits(31, 28, ARMState->decoded); 
+        if (checkCond(condReg, *(regFile + CPSR)) == 1){
+            int instrType = checkInstruction(instrBigEndian);
+            switch(instrType) {
+                case 0  :
+                    dataProcessInstr(regFile, instrBigEndian);  
+                    break; 
+                case 1  : 
+                    mult(regFile, instrBigEndian); 
+                    break;  
+                case 2  :
+                    singleDataTransfer(mainMem, regFile, instrBigEndian); 
+                    break; 
+                default :    
+                    assert(instrType == 3); 
+                    int offset = branch(instrBigEndian); 
+                    *(regFile + PC) = *(regFile + PC) + offset;   
+                    // TODO:: Next instruction is ignored.
+                    break;   
+            }    
+        } 
+        ARMState->decoded = ARMState->fetched; 
+        ARMState->fetched = mainMem[*(regFile + PC)]; 
+        regFile[PC] += sizeof(int);   
     }
 
-
-    // PRINT STATE OF MEMORY/REGISTERS                                         
+    // PRINT STATE OF MEMORY/REGISTERS
+    printState(regFile, mainMem, MAX_ENTRIES); 
     return 0;    
 }
 
@@ -324,16 +342,17 @@ uint32_t createMask(uint32_t top, uint32_t bot) {
 void printState(uint32_t *regFile, uint32_t *mainMem, int memSize) { 
     int i; 
     for (i = 0; i < GEN_REG; i++) { 
-        printf("%i  :          %i (%x)\n", i, regFile[i], regFile[i]);  
+        printf("%i\t:  %i (0x%08x)\n", i, regFile[i], regFile[i]);  
     }
     
-    printf("PC  :          %i (%x)\n", regFile[15], regFile[15]);
-    printf("CPSR:          %i (%x)\n", regFile[16], regFile[16]);
-    printf("Non-zero memory:"); 
-    
-    for (i = 0; i < memSize; i++) { 
-        printf("%x: %x\n", i, mainMem[i]); 
-    }  
+    printf("PC  :          %i (0x%08x)\n", regFile[15], regFile[15]);
+    printf("CPSR:          %i (0x%08x)\n", regFile[16], regFile[16]);
+    printf("Non-zero memory:\n");
+    for (i = 0; i < memSize; i++) {
+        if (mainMem[i] != 0) {
+            printf("0x%08x: 0x%x\n", i * 4, mainMem[i]);
+        }
+    }
 }
 
 /* Moves each bit to the left by the specified amouunt, extending with 0s */
