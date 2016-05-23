@@ -33,6 +33,8 @@ int checkInstruction(uint32_t instr);
 int checkCaseOne(uint32_t instr);
 int checkCaseTwo(uint32_t instr);
 void printState(uint32_t *regFile, uint8_t *mainMem);
+void simulatePipeline(uint8_t *mainMem, uint32_t *regFile, 
+    struct state *ARMState);
 
 // Single Data Transfer functions
 void singleDataTransfer(uint8_t *mainMem, uint32_t *regFile, uint32_t instr);
@@ -92,7 +94,23 @@ int main(int argc, char **argv) {
     // Stores the current state of the ARM machine  
     struct state *ARMState = (struct state*) malloc(sizeof(struct state)); 
     assert(ARMState != NULL);     
+   
+    // Begins the pipeline process  
+    simulatePipeline(mainMem, regFile, ARMState); 
     
+    // frees up dynamic memory
+    free(mainMem);
+    free(regFile);
+    free(ARMState);
+ 
+    return 0;    
+}
+
+/* Simulates the pipeline process which executes, decodes and fetches 
+instructions from the main memory */  
+void simulatePipeline(uint8_t *mainMem, uint32_t *regFile, 
+    struct state *ARMState) { 
+   
     ARMState->decoded = 0;
     ARMState->fetched = 0; 
     
@@ -120,16 +138,20 @@ int main(int argc, char **argv) {
         if (checkCond(condReg, *(regFile + CPSR)) == 1){
             int instrType = checkInstruction(ARMState->decoded);
             switch(instrType) {
+                // DATA PROCESSING
                 case 0  :
                     dataProcessInstr(regFile, ARMState->decoded);  
-                    break; 
+                    break;
+                // MULTIPLY 
                 case 1  : 
                     mult(regFile, ARMState->decoded); 
                     break;  
-                case 2  :
+                // SINGLE DATA TRANSFER
+                case 2  : 
                     singleDataTransfer(mainMem, regFile, ARMState->decoded); 
-                    break; 
-                default :    
+                    break;  
+                // BRANCH    
+                default :
                     assert(instrType == 3); 
                     int offset = branch(ARMState->decoded); 
                     regFile[PC] += offset;   
@@ -149,14 +171,7 @@ int main(int argc, char **argv) {
 
     // prints the state of processor upon termination
     printState(regFile, mainMem); 
-    
-    // frees up dynamic memory
-    free(mainMem);
-    free(regFile);
-    free(ARMState);
- 
-    return 0;    
-}
+}  
 
 /* Selects the bits from a range when given a leftmost and a rightmost bit, 
 and returns the selected bits as a 32-bit int */ 
@@ -193,8 +208,7 @@ uint32_t getInteger(uint8_t *mainMem, uint32_t firstByteAddr) {
 
 /*Determines the type of the instruction. Returns 0 if Data Processing, 
 1 if multiply, 2 if Single Data Transfer, and 3 if Branch. */ 
-int checkInstruction(uint32_t instr) { 
-    
+int checkInstruction(uint32_t instr) {  
     // If bit 27 is set then the type is Branch    
     if (getBits(27, 27, instr) == 1) {
         return 3;
@@ -296,7 +310,6 @@ int branch(uint32_t instr) {
 
 // Multiplies the contents of two registers with the option to accumulate
 void mult(uint32_t *regFile, uint32_t instr) {
- 
     /* The bit value of the accumulate bit, which decides whether the
     instruction performs a multiply or multiply and accumulate */     
     uint32_t accBit = getBits(21, 21, instr); 
@@ -317,22 +330,14 @@ void mult(uint32_t *regFile, uint32_t instr) {
     if (setBit == 1) {
 
         // The pointer to the CPSR register 
-        uint32_t *CPSRpntr = regFile + CPSR;   
+        uint32_t *CPSRreg = regFile + CPSR;   
        
         // The updated N and Z flag bit values        
         uint32_t N = getBits(31, 31, result);    
         uint32_t Z = (result == 0); 
-       
-        N <<= 30;     
-        Z <<= 29;
-    
-        uint32_t NMask = createMask(30, 0);
-        uint32_t ZMask = createMask(29, 0); 
-        N |= NMask;
-        Z |= ZMask;
-
-        *CPSRpntr &= N;
-        *CPSRpntr &= Z;     
+        
+        setCPSRBit(CPSRreg, 31, N);       
+        setCPSRBit(CPSRreg, 30, Z);  
     }  
 }
 
