@@ -67,14 +67,16 @@ uint32_t switchEndian(uint32_t num) {
     return a | b | c | d;
 }
 
+/* Extracts the first 4 bytes from the address and merges them into a 32 bit
+instruction in Big Endian */ 
 uint32_t getInteger(uint8_t *mainMem, uint32_t firstByteAddr) { 
     uint32_t firstByte = mainMem[firstByteAddr];
-    firstByte <<= 24;
-    uint32_t secondByte = mainMem[firstByteAddr + 1]; 
-    secondByte <<= 16;
-    uint32_t thirdByte = mainMem[firstByteAddr + 2]; 
-    thirdByte <<= 8;
-    uint32_t fourthByte = mainMem[firstByteAddr + 3];
+    firstByte <<= sizeof(uint8_t) * 3;
+    uint32_t secondByte = mainMem[firstByteAddr + sizeof(uint8_t)]; 
+    secondByte <<= sizeof(uint8_t) * 2;
+    uint32_t thirdByte = mainMem[firstByteAddr + sizeof(uint8_t) * 2]; 
+    thirdByte <<= sizeof(uint8_t);
+    uint32_t fourthByte = mainMem[firstByteAddr + sizeof(uint8_t) * 3];
     return switchEndian(firstByte | secondByte | thirdByte | fourthByte);     
 }
 
