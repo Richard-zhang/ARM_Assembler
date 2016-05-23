@@ -25,11 +25,11 @@ uint32_t arithmeticRightShift(uint32_t amount, uint32_t value);
 uint32_t rotateRight(uint32_t amount, uint32_t value);
 uint32_t getShiftAmount(uint32_t *regFile, uint32_t operand);
 uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand);
-void storeData(uint32_t *mainMem, uint32_t *regFile, 
+void storeData(uint8_t *mainMem, uint32_t *regFile, 
     uint32_t source, uint32_t index);
-void loadData(uint32_t *mainMem, uint32_t *regFile, 
+void loadData(uint8_t *mainMem, uint32_t *regFile, 
     uint32_t dest, uint32_t index);
-void singleDataTransfer(uint32_t *mainMem, uint32_t *regFile, uint32_t instr);
+void singleDataTransfer(uint8_t *mainMem, uint32_t *regFile, uint32_t instr);
 uint32_t evaluateImmediateValue(uint32_t operand);
 void setCPSRBit(uint32_t *CPSRreg, uint32_t bit, uint32_t value);
 uint32_t applyOpcode(uint32_t *regFile, uint32_t opcode, uint32_t regN,
@@ -39,8 +39,8 @@ uint32_t isOverflow(uint32_t int1, uint32_t int2);
 uint32_t getCarryFromALU(uint32_t *regFile, uint32_t instr, uint32_t op2,
                          uint32_t *CPSRreg);
 void dataProcessInstr(uint32_t *regFile, uint32_t instr);
-void printState(uint32_t *regFile, uint32_t *mainMem, int memSize);
-
+void printState(uint32_t *regFile, uint8_t *mainMem, int memSize);
+uint32_t getInteger(uint8_t *mainMem, uint32_t firstByteAddr);
 struct state {
     uint32_t decoded;
     uint32_t fetched; 
@@ -67,17 +67,26 @@ uint32_t switchEndian(uint32_t num) {
     return a | b | c | d;
 }
 
+uint32_t getInteger(uint8_t *mainMem, uint32_t firstByteAddr) { 
+    uint32_t firstByte = mainMem[firstByteAddr];
+    firstByte <<= 24;
+    uint32_t secondByte = mainMem[firstByteAddr + 1]; 
+    secondByte <<= 16;
+    uint32_t thirdByte = mainMem[firstByteAddr + 2]; 
+    thirdByte <<= 8;
+    uint32_t fourthByte = mainMem[firstByteAddr + 3];
+    return switchEndian(firstByte | secondByte | thirdByte | fourthByte);     
+}
+
+
 int main(int argc, char **argv) {
     assert(argc == 2); 
     
     // The maximum capacity of the ARM machine memory is 64KB
     const int MAX_SIZE = 65536;
     
-    // The maximum number of entries in the main memory 
-    const int MAX_ENTRIES = MAX_SIZE / sizeof(int);     
-
     // Allocating space for the main memory 
-    uint32_t *mainMem = calloc(MAX_ENTRIES, sizeof(int)); 
+    uint8_t *mainMem = calloc(MAX_SIZE, sizeof(char)); 
     
     // Declaring the binary file  
     FILE *binFile; 
@@ -86,7 +95,7 @@ int main(int argc, char **argv) {
     binFile = fopen(argv[1], "rb");
     
     if (binFile) {    
-        fread(mainMem, sizeof(int), MAX_ENTRIES, binFile); 
+        fread(mainMem, sizeof(char), MAX_SIZE, binFile); 
     } else {
         perror("File not found!");
     }
@@ -107,12 +116,12 @@ int main(int argc, char **argv) {
     /* The pipeline begins its execution. The first instruction is fetched and 
     then decoded.*/
     
-    ARMState->fetched = *mainMem;       
-    regFile[PC] += sizeof(char); 
+    ARMState->fetched = getInteger(mainMem, 0);       
+    regFile[PC] += sizeof(int); 
  
     ARMState->decoded = ARMState->fetched; 
-    ARMState->fetched = mainMem[regFile[PC]];    
-    regFile[PC] += sizeof(char);  
+    ARMState->fetched = getInteger(mainMem, regFile[PC]);    
+    regFile[PC] += sizeof(int);  
     uint32_t condReg;    
   
         
@@ -142,22 +151,22 @@ int main(int argc, char **argv) {
                 default :    
                     assert(instrType == 3); 
                     int offset = branch(ARMState->decoded); 
-                    regFile[PC] += (offset>>2);   
+                    regFile[PC] += offset;   
                     
-                    // Fetched is the instruction at PC + offset 
-                    ARMState->fetched = mainMem[regFile[PC]]; 
-                    regFile[PC] += 1;
+                    // Fetched is the instruction at PC + offset  
+                    ARMState->fetched = getInteger(mainMem, regFile[PC]);    
+                    regFile[PC] += sizeof(int);
                     break;   
             }    
         } 
 
-        ARMState->decoded = ARMState->fetched; 
-        ARMState->fetched = mainMem[regFile[PC]]; 
-        regFile[PC] += sizeof(char);   
+        ARMState->decoded = ARMState->fetched;
+        ARMState->fetched = getInteger(mainMem, regFile[PC]);    
+        regFile[PC] += sizeof(int);   
     }
 
     // PRINT STATE OF MEMORY/REGISTERS
-    printState(regFile, mainMem, MAX_ENTRIES); 
+    printState(regFile, mainMem, MAX_SIZE); 
     
     free(mainMem);
     free(regFile);
@@ -345,18 +354,18 @@ uint32_t createMask(uint32_t top, uint32_t bot) {
     return mask;
 }
 
-void printState(uint32_t *regFile, uint32_t *mainMem, int memSize) { 
+void printState(uint32_t *regFile, uint8_t *mainMem, int memSize) { 
     int i; 
     for (i = 0; i < GEN_REG; i++) { 
         printf("%i\t:  %d (0x%08x)\n", i, regFile[i], regFile[i]);  
     }
     
-    printf("PC  :          %d (0x%08x)\n", regFile[15] * 4, regFile[15] * 4);
+    printf("PC  :          %d (0x%08x)\n", regFile[15], regFile[15]);
     printf("CPSR:          %d (0x%08x)\n", regFile[16], regFile[16]);
     printf("Non-zero memory:\n");
-    for (i = 0; i < memSize; i++) {
-        if (mainMem[i] != 0) {
-            printf("0x%08x: 0x%08x\n", i * 4, switchEndian(mainMem[i]));
+    for (i = 0; i < memSize; i += 4) {
+        if (getInteger(mainMem, i) != 0) {
+            printf("0x%08x: 0x%08x\n", i, switchEndian(getInteger(mainMem, i)));
         }
     }
 }
@@ -441,7 +450,7 @@ uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand) {
 
 /* Helper function for single data transfer that stores the data from the source
     register to the main memory */
-void storeData(uint32_t *mainMem, uint32_t *regFile, 
+void storeData(uint8_t *mainMem, uint32_t *regFile, 
     uint32_t source, uint32_t index)
 {
     uint32_t data = regFile[source];
@@ -450,10 +459,10 @@ void storeData(uint32_t *mainMem, uint32_t *regFile,
 
 /* Helper function for single data transfer that loads the data from the main
     memory into the dest register */
-void loadData(uint32_t *mainMem, uint32_t *regFile, 
+void loadData(uint8_t *mainMem, uint32_t *regFile, 
     uint32_t dest, uint32_t index)
 {
-    uint32_t data = mainMem[index];
+    uint32_t data = switchEndian(mainMem[index]);
     printf("Index of mainMem: %u\n", index);
     printf("Data to be loaded: %u\n", data);
     printf("Destination register: %u\n", dest);
@@ -463,16 +472,17 @@ void loadData(uint32_t *mainMem, uint32_t *regFile,
 
 /* This function is used to do single data transfers. The instuction determines
     whether it is a load or a store and the offset for the base register */
-void singleDataTransfer(uint32_t *mainMem, uint32_t *regFile, uint32_t instr) {
+void singleDataTransfer(uint8_t *mainMem, uint32_t *regFile, uint32_t instr) {
+    printf("Reg0 before loading: %u\n", regFile[0]);
     // Initialise the offset
     uint32_t offset = getBits(11, 0, instr);
     printf("Offset value: %u\n", offset);
-    // Get the Immediate offset(I) bits
-    uint32_t offsetBits = getBits(25, 25, instr);
+    // Get the Immediate offset(I) bit
+    uint32_t immBit = getBits(25, 25, instr);
     // If the Immediate offset flag is set, get the shited register value
-    if (offsetBits != 0) {
+    if (immBit != 0) {
         printf("Shouldnt be a shifted register");
-        offset = (evaluateShiftedReg(regFile, offset) >> 2);
+        offset = evaluateShiftedReg(regFile, offset);
     }
     
     // Get the up bit
@@ -516,7 +526,7 @@ void singleDataTransfer(uint32_t *mainMem, uint32_t *regFile, uint32_t instr) {
     } else {
     // Post indexing
         // In a post-indexing have to check that Rm and Rn are not the same
-        if (offsetBits != 0) {
+        if (immBit != 0) {
             // Get Rm (offset register)
             uint32_t offsetReg = getBits(3, 0, instr);
             assert (offsetReg != baseReg);
@@ -551,10 +561,12 @@ uint32_t evaluateImmediateValue(uint32_t operand) {
     uint32_t immValue = getBits(7, 0, operand);
     
     // any rotation amount is twice the value in the 4 bit rotate field
-    rotateValue <<= 2;
+    rotateValue <<= 1;
 
     // the immediate value is rotated right by rotateValue
-    immValue >>= rotateValue;
+    if (rotateValue >= 1) {
+        immValue = rotateRight(rotateValue, immValue);
+    }
 
     return immValue;
 }
