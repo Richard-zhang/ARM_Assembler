@@ -67,11 +67,6 @@ uint32_t switchEndian(uint32_t num) {
     return a | b | c | d;
 }
 
-// returns the value of a register given the number of the register 
-uint32_t accessReg(uint32_t *regFile, int reg){
-    return regFile[reg];     
-}
-
 int main(int argc, char **argv) {
     assert(argc == 2); 
     
@@ -113,57 +108,60 @@ int main(int argc, char **argv) {
     then decoded.*/
     
     ARMState->fetched = *mainMem;       
-    regFile[PC] += sizeof(int); 
-   
+    regFile[PC] += sizeof(char); 
+ 
     ARMState->decoded = ARMState->fetched; 
     ARMState->fetched = mainMem[regFile[PC]];    
-    regFile[PC] += sizeof(int);  
-
+    regFile[PC] += sizeof(char);  
     uint32_t condReg;    
   
         
     
     // Start of infinite loop 
     for(;;) {
-  
-        uint32_t instrBigEndian = switchEndian(ARMState->decoded);
-
         // If instruction is 0, halt the program (break out of for loop) 
         if (ARMState->decoded == 0) {
-            regFile[PC] += sizeof(int); 
             break;
         } 
 
         /* Checks the condition code of the instruction, which specifies whether
            the instruction will be executed or not */ 
-        condReg = getBits(31, 28, ARMState->decoded); 
+        condReg = getBits(31, 28, ARMState->decoded);  
         if (checkCond(condReg, *(regFile + CPSR)) == 1){
-            int instrType = checkInstruction(instrBigEndian);
+            int instrType = checkInstruction(ARMState->decoded);
             switch(instrType) {
                 case 0  :
-                    dataProcessInstr(regFile, instrBigEndian);  
+                    dataProcessInstr(regFile, ARMState->decoded);  
                     break; 
                 case 1  : 
-                    mult(regFile, instrBigEndian); 
+                    mult(regFile, ARMState->decoded); 
                     break;  
                 case 2  :
-                    singleDataTransfer(mainMem, regFile, instrBigEndian); 
+                    singleDataTransfer(mainMem, regFile, ARMState->decoded); 
                     break; 
                 default :    
                     assert(instrType == 3); 
-                    int offset = branch(instrBigEndian); 
-                    *(regFile + PC) = *(regFile + PC) + offset;   
-                    // TODO:: Next instruction is ignored.
+                    int offset = branch(ARMState->decoded); 
+                    regFile[PC] += (offset>>2);   
+                    
+                    // Fetched is the instruction at PC + offset 
+                    ARMState->fetched = mainMem[regFile[PC]]; 
+                    regFile[PC] += 1;
                     break;   
             }    
         } 
+
         ARMState->decoded = ARMState->fetched; 
-        ARMState->fetched = mainMem[*(regFile + PC)]; 
-        regFile[PC] += sizeof(int);   
+        ARMState->fetched = mainMem[regFile[PC]]; 
+        regFile[PC] += sizeof(char);   
     }
 
     // PRINT STATE OF MEMORY/REGISTERS
     printState(regFile, mainMem, MAX_ENTRIES); 
+    
+    free(mainMem);
+    free(regFile);
+    free(ARMState); 
     return 0;    
 }
 
@@ -213,13 +211,21 @@ int checkCond(uint32_t cond, uint32_t CPSRreg) {
     It calls helper functions checkZ and equalityNV to return a value
     of 1 if the condition is met, or 0 if the condition is not met. */
     switch(cond) {
-        case 0  : return checkZ(CPSRreg); 
-        case 1  : return !checkZ(CPSRreg);
-        case 10 : return equalityNV(CPSRreg);
-        case 11 : return !equalityNV(CPSRreg);
-        case 12 : return (!checkZ(CPSRreg) && equalityNV(CPSRreg));
-        case 13 : return (checkZ(CPSRreg) || !equalityNV(CPSRreg));
-        default : assert(cond == 14); return 1;
+        case 0  : 
+            return checkZ(CPSRreg); 
+        case 1  : 
+            return !checkZ(CPSRreg);
+        case 10 : 
+            return equalityNV(CPSRreg);
+        case 11 : 
+            return !equalityNV(CPSRreg);
+        case 12 : 
+            return (!checkZ(CPSRreg) && equalityNV(CPSRreg));
+        case 13 : 
+            return (checkZ(CPSRreg) || !equalityNV(CPSRreg));
+        default : 
+            assert(cond == 14); 
+            return 1;
     } 
 }
 
@@ -293,8 +299,8 @@ void mult(uint32_t *regFile, uint32_t instr) {
         uint32_t N = getBits(31, 31, result);    
         uint32_t Z = (result == 0); 
        
-        N <<= 31;     
-        Z <<= 30;
+        N <<= 30;     
+        Z <<= 29;
     
         uint32_t NMask = createMask(30, 0);
         uint32_t ZMask = createMask(29, 0); 
@@ -342,15 +348,15 @@ uint32_t createMask(uint32_t top, uint32_t bot) {
 void printState(uint32_t *regFile, uint32_t *mainMem, int memSize) { 
     int i; 
     for (i = 0; i < GEN_REG; i++) { 
-        printf("%i\t:  %i (0x%08x)\n", i, regFile[i], regFile[i]);  
+        printf("%i\t:  %d (0x%08x)\n", i, regFile[i], regFile[i]);  
     }
     
-    printf("PC  :          %i (0x%08x)\n", regFile[15], regFile[15]);
-    printf("CPSR:          %i (0x%08x)\n", regFile[16], regFile[16]);
+    printf("PC  :          %d (0x%08x)\n", regFile[15] * 4, regFile[15] * 4);
+    printf("CPSR:          %d (0x%08x)\n", regFile[16], regFile[16]);
     printf("Non-zero memory:\n");
     for (i = 0; i < memSize; i++) {
         if (mainMem[i] != 0) {
-            printf("0x%08x: 0x%x\n", i * 4, mainMem[i]);
+            printf("0x%08x: 0x%08x\n", i * 4, switchEndian(mainMem[i]));
         }
     }
 }
@@ -421,30 +427,38 @@ uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand) {
     uint32_t shiftType = getBits(6, 5, operand);
     
     switch (shiftType) {
-        case 0 : return logicalLeftShift(shiftAmount, shiftValue);
-        case 1 : return logicalRightShift(shiftAmount, shiftValue);
-        case 2 : return arithmeticRightShift(shiftAmount, shiftValue);
-        default: assert(shiftType == 3);
-                 return rotateRight(shiftAmount, shiftValue);
+        case 0 : 
+            return logicalLeftShift(shiftAmount, shiftValue);
+        case 1 : 
+            return logicalRightShift(shiftAmount, shiftValue);
+        case 2 : 
+            return arithmeticRightShift(shiftAmount, shiftValue);
+        default: 
+            assert(shiftType == 3);
+            return rotateRight(shiftAmount, shiftValue);
     }
 }
 
 /* Helper function for single data transfer that stores the data from the source
-    register to the main memory and changes the endiannes of the data */
+    register to the main memory */
 void storeData(uint32_t *mainMem, uint32_t *regFile, 
     uint32_t source, uint32_t index)
 {
-    uint32_t data = switchEndian(regFile[source]);
+    uint32_t data = regFile[source];
     mainMem[index] = data;
 }
 
 /* Helper function for single data transfer that loads the data from the main
-    memory into the dest register and changes the endiannes of the data */
+    memory into the dest register */
 void loadData(uint32_t *mainMem, uint32_t *regFile, 
     uint32_t dest, uint32_t index)
 {
-    uint32_t data = switchEndian(mainMem[index]);
+    uint32_t data = mainMem[index];
+    printf("Index of mainMem: %u\n", index);
+    printf("Data to be loaded: %u\n", data);
+    printf("Destination register: %u\n", dest);
     regFile[dest] = data;
+    printf("Data loaded: %u\n", regFile[dest]);
 }
 
 /* This function is used to do single data transfers. The instuction determines
@@ -452,11 +466,13 @@ void loadData(uint32_t *mainMem, uint32_t *regFile,
 void singleDataTransfer(uint32_t *mainMem, uint32_t *regFile, uint32_t instr) {
     // Initialise the offset
     uint32_t offset = getBits(11, 0, instr);
+    printf("Offset value: %u\n", offset);
     // Get the Immediate offset(I) bits
     uint32_t offsetBits = getBits(25, 25, instr);
     // If the Immediate offset flag is set, get the shited register value
     if (offsetBits != 0) {
-        offset = evaluateShiftedReg(regFile, offset);
+        printf("Shouldnt be a shifted register");
+        offset = (evaluateShiftedReg(regFile, offset) >> 2);
     }
     
     // Get the up bit
@@ -470,11 +486,15 @@ void singleDataTransfer(uint32_t *mainMem, uint32_t *regFile, uint32_t instr) {
 
     // Get the destination register
     uint32_t destReg = getBits(15, 12, instr);
-    
+   
+    printf("The base reg is: %u\n", baseReg); 
     // Set the baseReg index
-    uint32_t index = regFile[baseReg];
+    int32_t index = regFile[baseReg];
+    printf("The init index is: %d\n", index);
     if (baseReg == PC) {
+        printf("It should go into PC\n");
         index -= 2;
+        printf("The index now is: %d\n", index);
     }
 
     // Get the Pre/Post indexing bit
@@ -528,7 +548,7 @@ uint32_t evaluateImmediateValue(uint32_t operand) {
 
     /* the immediate value does not need to be zero-extended as it is declared
        as a uint32_t */
-    uint32_t immValue = getBits(0, 7, operand);
+    uint32_t immValue = getBits(7, 0, operand);
     
     // any rotation amount is twice the value in the 4 bit rotate field
     rotateValue <<= 2;
@@ -549,14 +569,14 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
     
     // get the 25th bit of the instruction (immediate operand bit)
     uint32_t immOp = getBits(25, 25, instr);
-
+  
     // get the 20th bit of the instruction (set condition bit)
     uint32_t set = getBits(20, 20, instr);
-
+    
     // get the operand2 of the instruction
     uint32_t op2 = getBits(11, 0, instr);
 
-    if(immOp != 0) {
+    if (immOp != 0) {
     // if the immediate operand bit is 1. op2 is an immediate value
         op2 = evaluateImmediateValue(op2);
     } else {
@@ -574,17 +594,17 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
     // the register to put result into
     uint32_t destReg = getBits(15, 12, instr);
    
-    if(opcode < 8 || opcode > 10) {
+    if (opcode < 8 || opcode > 10) {
         regFile[destReg] = result;
     }
     
-    if(set != 0) {
+    if (set != 0) {
         // V bit of CPSR is not altered
     
         uint32_t carry;
         /* C bit of CPSR is altered according to the type of shift
            (left or right) */
-        if(immOp == 0) {
+        if (immOp == 0) {
             // op2 was a register
             uint32_t op2Bits = getBits(11, 0, instr);
             switch(opcode) {
@@ -593,15 +613,18 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
                 case 8  :
                 case 9  :
                 case 12 :
-                case 13 : carry = getCarryFromShifter(regFile, op2Bits); break;
+                case 13 : 
+                    carry = getCarryFromShifter(regFile, op2Bits); 
+                    break;
                 case 2  :
                 case 3  :
                 case 4  :
-                case 10 : carry 
-                          = getCarryFromALU(regFile, instr, op2, CPSRreg);
-                          break;
-                default : perror("The opcode entered was not valid, carry\
-                              not produced.");
+                case 10 : 
+                    carry = getCarryFromALU(regFile, instr, op2, CPSRreg);
+                    break;
+                default : 
+                    perror("The opcode entered was not valid, carry\
+                            not produced.");
             }
         } else {
             // bits of op2 in instr gave an immediate value
@@ -617,8 +640,8 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
     
         // set C flag (bit 29)
         setCPSRBit(CPSRreg, 29, carry);    
-
-        if(result == 0) {
+    
+        if (result == 0) {
             // set Z flag (bit 30)
             setCPSRBit(CPSRreg, 30, 1);
         }
@@ -633,7 +656,7 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
 uint32_t getCarryFromALU(uint32_t *regFile, uint32_t instr, uint32_t op2,
                          uint32_t *CPSRreg) 
 {
-       uint32_t opcode = getBits(24, 21, instr);
+    uint32_t opcode = getBits(24, 21, instr);
     assert(opcode == 2 || opcode == 3 || opcode == 4 || opcode == 10);
 
     uint32_t regN = getBits(19, 16, instr);
@@ -647,12 +670,12 @@ uint32_t getCarryFromALU(uint32_t *regFile, uint32_t instr, uint32_t op2,
         }
     } else if(opcode == 2 || opcode == 10) {
         // if sub or cmp
-        if(op1 > op2) {
+        if(op1 >= op2) {
             // no borrow was produced
             return 1;
         }
     } else if(opcode == 3) {
-        if(op2 > op1) {
+        if(op2 >= op1) {
             // rsb is well formed, no borrow produced
             return 1;
         }
@@ -701,16 +724,23 @@ uint32_t applyOpcode(uint32_t *regFile, uint32_t opcode, uint32_t regN,
     
     switch(opcode) {
         case 0  : 
-        case 8  : return regFile[regN] & op2;
+        case 8  : 
+            return regFile[regN] & op2;
         case 1  :
-        case 9  : return regFile[regN] ^ op2;
+        case 9  : 
+            return regFile[regN] ^ op2;
         case 2  : 
-        case 10 : return regFile[regN] - op2;
-        case 3  : return op2 - regFile[regN];
-        case 4  : return regFile[regN] + op2;
-        case 12 : return regFile[regN] | op2;
-        default : assert(opcode == 13);
-                  return op2;
+        case 10 : 
+            return regFile[regN] - op2;
+        case 3  : 
+            return op2 - regFile[regN];
+        case 4  : 
+            return regFile[regN] + op2;
+        case 12 : 
+            return regFile[regN] | op2;
+        default : 
+            assert(opcode == 13);
+            return op2;
     } 
 }
 
@@ -720,12 +750,13 @@ void setCPSRBit(uint32_t *CPSRreg, uint32_t bit, uint32_t value) {
     assert(bit <= 31 && bit >= 28);
     assert(value == 0 || value == 1);
    
-    uint32_t mask = createMask(bit, bit);
- 
-    if(value == 0) {
+    int32_t mask = createMask(bit, bit);
+    
+    if (value == 0) {
         // invert the mask
         mask = ~mask;
-    }
-        
-    *CPSRreg &= mask;   
+        *CPSRreg &= mask;   
+    } else {
+        *CPSRreg |= mask;
+    } 
 }       
