@@ -54,10 +54,9 @@ struct mi {
 
 
 //grand design
-
-
-
-
+void writer(char *, FILE *);
+void parseDpi(char *, FILE *);
+void parseMi(char *, FILE *);
 
 //change the big endian to small endian memory
 void endianConvert(unsigned char *);
@@ -75,8 +74,6 @@ int getVal(char *);
 //by the struct dpi *convert(char *)
 
 void dpiToBin(struct dpi *, FILE *);
-
-//conver the data processing ins
 struct dpi *dpiConvert(char *);
 
 //followings are helper function of struct dpi *conver(char *)
@@ -99,6 +96,7 @@ struct entry *put(char *, char *);
 struct elem *find(char *);
 struct elem *install(char *, Ins);
 void setup();
+Ins typeId(char *);
 
 //error handling check if there is enough space for malloc
 void isEnoughSpace(void *);
@@ -124,6 +122,9 @@ int main(int argc, char **argv) {
     }
     //IO
     while (fgets(lineBuffer, MAX_LINE, inFile)) {
+
+        writer(lineBuffer, outFile);
+        /*
         struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
         isEnoughSpace(ins);
 
@@ -131,6 +132,7 @@ int main(int argc, char **argv) {
         dpiToBin(ins, outFile);
 
         free(ins);
+        */
     }
 
     fclose(outFile);
@@ -139,6 +141,66 @@ int main(int argc, char **argv) {
     return 0;
 }
 
+Ins typeId(char *str) {
+    return find(str)->defn;
+}
+
+void writer(char *str, FILE *outFile) {
+    if( strchr(str, ':') == NULL) {
+        char *test = str;
+        char *copy = strdup(test);
+        Ins type = typeId(strtok_r(copy, " ", &copy));
+
+        switch (type) {
+            case 1:
+                parseDpi(test, outFile);
+                break;
+            case 2:
+                parseMi(test, outFile);
+                break;
+            case 3:
+                //TODO single data transfer
+                break;
+            case 4:
+                //TODO branch instruction
+                break;
+            case 5:
+                //TODO Special instruction
+                break;
+            default:
+                //possible extension
+                //auto correcting the command
+                //if the user input the command that can be corrected
+                //then suggest the possible command
+                fprintf(stderr, "unidentify command\n");
+                exit(1);
+                break;
+        }
+
+    } else {
+        //TODO deal with label
+    }
+}
+
+void parseDpi(char *lineBuffer, FILE *outFile) {
+    struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
+    isEnoughSpace(ins);
+
+    ins = dpiConvert(lineBuffer);
+    dpiToBin(ins, outFile);
+
+    free(ins);
+}
+
+void parseMi(char *lineBuffer, FILE *outFile) {
+    struct mi *ins = (struct mi*) malloc(sizeof(struct mi));
+    isEnoughSpace(ins);
+
+    ins = miConvert(lineBuffer);
+    miToBin(ins, outFile);
+
+    free(ins);
+}
 //dataProcessingConverter
 void endianConvert(unsigned char *ip) {
     swap(ip, ip + 3);
@@ -169,7 +231,6 @@ struct mi *miConvert(char *str) {
     ins->id1 = 0;
     ins->id2 = 9;
 
-    printf("%s", opcode);
     switch(*(opcode+1)) {
         case 'u':
             ins->a = 0;
@@ -224,7 +285,7 @@ struct dpi *dpiConvert(char *str) {
         case 13: //mov ->  mov Rd, <Operand2>
             ins->rn = 0;
             rd = strtok_r(test, ",", &test);
-            op2 = strtok_r(test, ",", &test);
+            op2 = strtok_r(test, " ", &test);
             setIflagAndOper(ins, op2);
             setRd(ins, rd);
 
@@ -232,7 +293,7 @@ struct dpi *dpiConvert(char *str) {
         case 8: //tst
             ins->rd = 0;
             rn = strtok_r(test, ",", &test);
-            op2 = strtok_r(test, ",", &test);
+            op2 = strtok_r(test, " ", &test);
             setIflagAndOper(ins, op2);
             setRn(ins, rn);
 
@@ -241,7 +302,7 @@ struct dpi *dpiConvert(char *str) {
             ins->rd = 0;
             ins->s  = 1;
             rn = strtok_r(test, ",", &test);
-            op2 = strtok_r(test, ",", &test);
+            op2 = strtok_r(test, " ", &test);
             setIflagAndOper(ins, op2);
             setRn(ins, rn);
 
@@ -252,7 +313,7 @@ struct dpi *dpiConvert(char *str) {
             ins->rd = 0;
             ins->s  = 1;
             rn = strtok_r(test, ",", &test);
-            op2 = strtok_r(test, ",", &test);
+            op2 = strtok_r(test, " ", &test);
             setIflagAndOper(ins, op2);
             setRn(ins, rn);
 
@@ -291,24 +352,31 @@ void setRn(struct dpi *ins, char *str) {
 }
 
 void setIflagAndOper(struct dpi *ins, char *str) {
-    char *test = str;
-    int iflag;
     int ope2;
-    if (test[0] == '#') {
-        iflag = 1;
-        if(*(test+2) == 'x') {
-            ope2 = (int) strtol(test+1, (char **) NULL, 16);
-        } else {
-            ope2 = (int) strtol(test+1, (char **) NULL, 10);
-        }
-    } else {
-        //assert(&(test+1) == 'r');
-        iflag = 0;
-        ope2 = (int) strtol(test+1, (char **) NULL, 10);
-    }
+    switch (str[0]) {
+        case '#':
+            ins->i = 1;
+            if((str+2) != NULL) {
+                if(*(str+2) == 'x') {
+                    ope2 = (int) strtol(str+1, (char **) NULL, 16);
+                    ins->operand  = ope2;
+                    break;
+                    printf("you will never see this printing\n");
+                }
+            }
 
-    ins->i = iflag;
-    ins->operand = ope2;
+            ope2 = (int) strtol(str+1, (char **) NULL, 10);
+            ins->operand = ope2;
+            break;
+        case 'r':
+            ins->i = 0;
+            ope2 = (int) strtol(str+1, (char **) NULL, 10);
+            ins->operand = ope2;
+            break;
+        default:
+            fprintf(stderr, "no support operand2\n");
+            exit(1);
+    }
 }
 
 void dpiToBin(struct dpi *ins, FILE *file) {
@@ -353,6 +421,8 @@ void miToBin(struct mi *ins, FILE *file) {
     *(start+3) |= (ins->id2) << 4;
     *(start+3) |= ins->rm;
 
+
+    endianConvert(start);
     fwrite(start, sizeof(unsigned char), 4, file);
 
     free(start);
