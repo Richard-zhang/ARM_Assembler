@@ -1,11 +1,25 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#define MAXLINE 32
-#define HASHSIZE 101
+#define MAX_LINE  32
+#define HASH_SIZE 101
+#define NUM_INS   101
 
+typedef enum {
+    ADD=1,SUB=1,RSB=1,AND=1,EOR=1,ORR=1,MOV=1,TST=1,TEQ=1,CMP=1,
+    MUL=2,MLA=2,LDR=3,STR=3,BEQ=4,BNE=4,BGE=4,BLT=4,BGT=4,
+    BLE=4,B  =4,LSL=5,ANDEQ=5
+} Ins;
+
+struct elem {
+    struct elem *next;
+    char *name;
+    Ins defn;
+};
+
+static struct elem *hashMap[NUM_INS];
 //create hash table and entry for hashtable
-static struct entry *hashTable[HASHSIZE];
+static struct entry *hashTable[HASH_SIZE];
 
 struct entry {
     struct entry *next;
@@ -25,6 +39,36 @@ struct dpi {
     unsigned int operand : 12;
 };
 
+//multiply instruction format
+struct mi {
+    unsigned int cond : 4;
+    unsigned int id1  : 6;
+    unsigned int a    : 1;
+    unsigned int s    : 1;
+    unsigned int rd   : 4;
+    unsigned int rn   : 4;
+    unsigned int rs   : 4;
+    unsigned int id2  : 4;
+    unsigned int rm   : 4;
+};
+
+
+//grand design
+
+
+
+
+
+//change the big endian to small endian memory
+void endianConvert(unsigned char *);
+void swap(unsigned char *, unsigned char *);
+
+
+//ml
+void miToBin(struct mi *, FILE *);
+struct mi *miConvert(char *);
+int getVal(char *);
+
 //API for convert data processing instruction to binary file
 
 //write the output binary file using the struct dpi returned
@@ -33,13 +77,10 @@ struct dpi {
 void dpiToBin(struct dpi *, FILE *);
 
 //conver the data processing ins
-struct dpi *convert(char *);
+struct dpi *dpiConvert(char *);
 
 //followings are helper function of struct dpi *conver(char *)
 
-//change the big endian to small endian memory
-void endianConvert(unsigned char *);
-void swap(unsigned char *, unsigned char *);
 //get the decimal number of opcode
 int  getOpVal(char *);
 //set up I field and Operand field
@@ -51,9 +92,13 @@ void setRn(struct dpi *, char *);
 
 
 //API for hashtable
-unsigned int has(char *);
+unsigned int hash(char *);
+unsigned int hashTwo(char *);
 struct entry *lookup(char *);
 struct entry *put(char *, char *);
+struct elem *find(char *);
+struct elem *install(char *, Ins);
+void setup();
 
 //error handling check if there is enough space for malloc
 void isEnoughSpace(void *);
@@ -62,23 +107,14 @@ void isEnoughSpace(void *);
 //main function
 int main(int argc, char **argv) {
     //create a symbol table
-    put("and", "0000");
-    put("eor", "0001");
-    put("sub", "0010");
-    put("rsb", "0011");
-    put("add", "0100");
-    put("orr", "1100");
-    put("mov", "1101");
-    put("tst", "1000");
-    put("teq", "1001");
-    put("cmp", "1010");
+    setup();
 
     //reading soruce file and creating output file
     char *inname  = argv[1];
     char *outname = argv[2];
     FILE *inFile;
     FILE *outFile;
-    char lineBuffer[MAXLINE];
+    char lineBuffer[MAX_LINE];
     //initilize the files
     inFile    = fopen(inname, "r");
     outFile   = fopen(outname, "wb");
@@ -87,11 +123,11 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
     //IO
-    while (fgets(lineBuffer, MAXLINE, inFile)) {
+    while (fgets(lineBuffer, MAX_LINE, inFile)) {
         struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
         isEnoughSpace(ins);
 
-        ins = convert(lineBuffer);
+        ins = dpiConvert(lineBuffer);
         dpiToBin(ins, outFile);
 
         free(ins);
@@ -115,7 +151,63 @@ void swap(unsigned char *first, unsigned char *end) {
     *end   = temp;
 }
 
-struct dpi *convert(char *str) {
+
+//mi
+int getVal(char *str) {
+    return (int) strtol(str+1, NULL, 10);
+}
+
+struct mi *miConvert(char *str) {
+    char *test = str;
+    char *opcode, *rd, *rn, *rs, *rm;
+    struct mi *ins = (struct mi*) malloc(sizeof(struct mi));
+    isEnoughSpace(ins);
+
+    opcode = strtok_r(test, " ", &test);
+    ins->cond = 14;
+    ins->s = 0;  //TODO such a big bug
+    ins->id1 = 0;
+    ins->id2 = 9;
+
+    printf("%s", opcode);
+    switch(*(opcode+1)) {
+        case 'u':
+            ins->a = 0;
+            ins->rn = 0;
+            rd = strtok_r(test, ",", &test);
+            rm = strtok_r(test, ",", &test);
+            rs = strtok_r(test, ",", &test);
+            ins->rd = getVal(rd);
+            ins->rm = getVal(rm);
+            ins->rs = getVal(rs);
+
+            break;
+        case 'l':
+            ins->a = 1;
+            rd = strtok_r(test, ",", &test);
+            rm = strtok_r(test, ",", &test);
+            rs = strtok_r(test, ",", &test);
+            rn = strtok_r(test, ",", &test);
+
+            ins->rd = getVal(rd);
+            ins->rm = getVal(rm);
+            ins->rs = getVal(rs);
+            ins->rn = getVal(rn);
+
+            break;
+        default:
+            fprintf(stderr, "Something is wrong\n");
+            exit(1);
+            break;
+    }
+
+    return ins;
+
+}
+
+
+//dpi
+struct dpi *dpiConvert(char *str) {
     char *test = str;
     char *opcode, *rd, *rn, *op2;
     struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
@@ -245,6 +337,28 @@ void dpiToBin(struct dpi *ins, FILE *file) {
     free(start);
 }
 
+void miToBin(struct mi *ins, FILE *file) {
+    unsigned char *start;
+    start = (unsigned char *) calloc(4, sizeof(unsigned char));
+
+    *start |= (ins->cond) << 4;
+
+    *(start+1) |= (ins->a) << 5;
+    *(start+1) |= (ins->s) << 4;
+    *(start+1) |= ins->rd;
+
+    *(start+2) |= (ins->rn) << 4;
+    *(start+2) |= ins->rs;
+
+    *(start+3) |= (ins->id2) << 4;
+    *(start+3) |= ins->rm;
+
+    fwrite(start, sizeof(unsigned char), 4, file);
+
+    free(start);
+}
+
+
 unsigned int hash(char *s) {
     unsigned int hashval;
 
@@ -252,8 +366,53 @@ unsigned int hash(char *s) {
         hashval = *s + 31 * hashval;
     }
 
-    return hashval % HASHSIZE;
+    return hashval % HASH_SIZE;
 }
+
+unsigned int hashTwo(char *s) {
+    unsigned int hashval;
+
+    for (hashval = 0; *s != '\0'; s++) {
+        hashval = *s + 5 * hashval;
+    }
+
+    return hashval % NUM_INS;
+}
+
+struct elem *find(char *s) {
+    struct elem *np;
+    for (np = hashMap[hashTwo(s)]; np != NULL; np = np->next) {
+        if (strcmp(s, np->name) == 0) {
+            return np;
+        }
+    }
+
+    return NULL;
+}
+
+struct elem *install(char *name, Ins defn) {
+    struct elem *np;
+    unsigned int hashval;
+
+    if ((np = find(name)) == NULL) {
+        np = (struct elem *) malloc(sizeof(*np));
+        if (np == NULL || (np->name = strdup(name)) == NULL) {
+            return NULL;
+        }
+
+        hashval = hashTwo(name);
+        np->next = hashMap[hashval];
+        hashMap[hashval] = np;
+    } else {
+        free((void *) np->defn);
+    }
+
+    np->defn = defn;
+
+
+    return np;
+}
+
 
 struct entry *lookup(char *s) {
     struct entry *np;
@@ -288,6 +447,42 @@ struct entry *put(char *name, char *defn) {
     }
 
     return np;
+}
+
+void setup() {
+    put("and", "0000");
+    put("eor", "0001");
+    put("sub", "0010");
+    put("rsb", "0011");
+    put("add", "0100");
+    put("orr", "1100");
+    put("mov", "1101");
+    put("tst", "1000");
+    put("teq", "1001");
+    put("cmp", "1010");
+    install("add", ADD);
+    install("sub", SUB);
+    install("rsb",RSB);
+    install("and",AND);
+    install("eor",EOR);
+    install("orr",ORR);
+    install("mov",MOV);
+    install("tst",TST);
+    install("teq",TEQ);
+    install("cmp",CMP);
+    install("mul",MUL);
+    install("mla",MLA);
+    install("ldr",LDR);
+    install("str",STR);
+    install("beq",BEQ);
+    install("bne",BNE);
+    install("bge",BGE);
+    install("blt",BLT);
+    install("ble",BLE);
+    install("b",B);
+    install("bgt",BGT);
+    install("lsl",LSL);
+    install("andeq",ANDEQ);
 }
 
 void isEnoughSpace(void *ip) {
