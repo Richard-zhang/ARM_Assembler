@@ -41,6 +41,7 @@ uint32_t getCarryFromALU(uint32_t *regFile, uint32_t instr, uint32_t op2,
 void dataProcessInstr(uint32_t *regFile, uint32_t instr);
 void printState(uint32_t *regFile, uint8_t *mainMem, int memSize);
 uint32_t getInteger(uint8_t *mainMem, uint32_t firstByteAddr);
+
 struct state {
     uint32_t decoded;
     uint32_t fetched; 
@@ -71,11 +72,11 @@ uint32_t switchEndian(uint32_t num) {
 instruction in Big Endian */ 
 uint32_t getInteger(uint8_t *mainMem, uint32_t firstByteAddr) { 
     uint32_t firstByte = mainMem[firstByteAddr];
-    firstByte <<= sizeof(uint8_t) * 3;
+    firstByte <<= (CHAR_BIT * 3);
     uint32_t secondByte = mainMem[firstByteAddr + sizeof(uint8_t)]; 
-    secondByte <<= sizeof(uint8_t) * 2;
+    secondByte <<= (CHAR_BIT * 2);
     uint32_t thirdByte = mainMem[firstByteAddr + sizeof(uint8_t) * 2]; 
-    thirdByte <<= sizeof(uint8_t);
+    thirdByte <<= CHAR_BIT;
     uint32_t fourthByte = mainMem[firstByteAddr + sizeof(uint8_t) * 3];
     return switchEndian(firstByte | secondByte | thirdByte | fourthByte);     
 }
@@ -217,10 +218,10 @@ int checkCaseTwo(uint32_t instr) {
     }
 }
 
+/* This function is used to check the condition of the instruction.
+   It calls helper functions checkZ and equalityNV to return a value
+   of 1 if the condition is met, or 0 if the condition is not met. */
 int checkCond(uint32_t cond, uint32_t CPSRreg) {
-    /* This function is used to check the condition of the instruction.
-    It calls helper functions checkZ and equalityNV to return a value
-    of 1 if the condition is met, or 0 if the condition is not met. */
     switch(cond) {
         case 0  : 
             return checkZ(CPSRreg); 
@@ -356,6 +357,7 @@ uint32_t createMask(uint32_t top, uint32_t bot) {
     return mask;
 }
 
+// Prints the state of the processor
 void printState(uint32_t *regFile, uint8_t *mainMem, int memSize) { 
     int i; 
     for (i = 0; i < GEN_REG; i++) { 
@@ -372,17 +374,17 @@ void printState(uint32_t *regFile, uint8_t *mainMem, int memSize) {
     }
 }
 
-/* Moves each bit to the left by the specified amouunt, extending with 0s */
+/* Moves each bit to the left by the specified amount, extending with 0s */
 uint32_t logicalLeftShift(uint32_t amount, uint32_t value) {
     return (value << amount);
 }
 
-/* Moves each bit to the right by the specified amouunt, extending with 0s */
+/* Moves each bit to the right by the specified amount, extending with 0s */
 uint32_t logicalRightShift(uint32_t amount, uint32_t value) {
     return (value >> amount);
 }
 
-/* Makes an anrithmetic shift, while preserving the sign bit */
+/* Makes an arithmetic shift, while preserving the sign bit */
 uint32_t arithmeticRightShift(uint32_t amount, uint32_t value) {
     uint32_t leftMostBit = getBits(31, 31, value);
     // Logical right shift
@@ -583,19 +585,17 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
     
     // get the 25th bit of the instruction (immediate operand bit)
     uint32_t immOp = getBits(25, 25, instr);
-  
-    // get the 20th bit of the instruction (set condition bit)
-    uint32_t set = getBits(20, 20, instr);
     
     // get the operand2 of the instruction
-    uint32_t op2 = getBits(11, 0, instr);
+    uint32_t op2Bits = getBits(11, 0, instr);
+    uint32_t op2;
 
     if (immOp != 0) {
     // if the immediate operand bit is 1. op2 is an immediate value
-        op2 = evaluateImmediateValue(op2);
+        op2 = evaluateImmediateValue(op2Bits);
     } else {
     // else, the immediate operand bit is 0. op2 is a register
-        op2 = evaluateShiftedReg(regFile, op2);
+        op2 = evaluateShiftedReg(regFile, op2Bits);
     }
   
     // get the opcode from the instruction, and regN from instruction
@@ -605,59 +605,50 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
     // result from applying opcode
     uint32_t result = applyOpcode(regFile, opcode, regN, op2);
     
-    // the register to put result into
-    uint32_t destReg = getBits(15, 12, instr);
-   
     if (opcode < 8 || opcode > 10) {
+        // the register to put result into
+        uint32_t destReg = getBits(15, 12, instr);
         regFile[destReg] = result;
     }
     
+    // get the 20th bit of the instruction (set condition bit)
+    uint32_t set = getBits(20, 20, instr);
+
     if (set != 0) {
         // V bit of CPSR is not altered
     
         uint32_t carry;
         /* C bit of CPSR is altered according to the type of shift
            (left or right) */
-        if (immOp == 0) {
-            // op2 was a register
-            uint32_t op2Bits = getBits(11, 0, instr);
-            switch(opcode) {
-                case 0  :
-                case 1  :
-                case 8  :
-                case 9  :
-                case 12 :
-                case 13 : 
-                    carry = getCarryFromShifter(regFile, op2Bits); 
-                    break;
-                case 2  :
-                case 3  :
-                case 4  :
-                case 10 : 
-                    carry = getCarryFromALU(regFile, instr, op2, CPSRreg);
-                    break;
-                default : 
-                    perror("The opcode entered was not valid, carry\
-                            not produced.");
-            }
-        } else {
-            // bits of op2 in instr gave an immediate value
-            uint32_t shiftAmount = getBits(11, 8, instr);
-            uint32_t imm = getBits(7, 0, instr);
-            // shiftAmount x 2 to give real rotation value
-            shiftAmount <<= 1;
-        
-            // set shiftAmount to retrieve correct carry for right rotations
-            shiftAmount -= 1;
-            carry = getBits(shiftAmount, shiftAmount, imm);        
+        switch(opcode) {
+            case 0  :
+            case 1  :
+            case 8  :
+            case 9  :
+            case 12 :
+            case 13 : 
+                carry = getCarryFromShifter(regFile, op2Bits); 
+                break;
+            case 2  :
+            case 3  :
+            case 4  :
+            case 10 : 
+                carry = getCarryFromALU(regFile, instr, op2, CPSRreg);
+                break;
+            default : 
+                perror("The opcode entered was not valid, carry\
+                        not produced.");
         }
-    
+        
         // set C flag (bit 29)
         setCPSRBit(CPSRreg, 29, carry);    
     
         if (result == 0) {
-            // set Z flag (bit 30)
+            // if result == 0, set Z flag (bit 30)
             setCPSRBit(CPSRreg, 30, 1);
+        } else {
+            // if result != 0, clear Z flag (bit 30)
+            setCPSRBit(CPSRreg, 30, 0);
         }
 
         // set N flag (bit 31)
@@ -769,8 +760,10 @@ void setCPSRBit(uint32_t *CPSRreg, uint32_t bit, uint32_t value) {
     if (value == 0) {
         // invert the mask
         mask = ~mask;
+        // clear the bit
         *CPSRreg &= mask;   
     } else {
+        // set the bit
         *CPSRreg |= mask;
     } 
 }       
