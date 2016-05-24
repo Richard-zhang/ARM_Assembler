@@ -52,6 +52,19 @@ struct mi {
     unsigned int rm   : 4;
 };
 
+struct sdti {
+    unsigned int cond : 4;
+    unsigned int id   : 2;
+    unsigned int i    : 1;
+    unsigned int p    : 1;
+    unsigned int u    : 1;
+    unsigned int id2  : 2;
+    unsigned int l    : 1;
+    unsigned int rn   : 4;
+    unsigned int rd   : 4;
+    unsigned int offs : 12;
+};
+
 //grand design
 void writer(char *, FILE *);
 //parsing data processing instructions
@@ -72,6 +85,21 @@ void miToBin(struct mi *, FILE *);
 struct mi *miConvert(char *);
 int getVal(char *);
 //end
+
+
+//parsing single data transfer
+void parseSdti(char *, FILE *);
+
+struct sdti *sdtiConvert(char *);
+void parseSdti(char *, FILE *);
+
+void removeChar(char *, char);
+int isSquare(char *);
+void helpParseRnRmU(struct sdti *, char *);
+void parseRnRmU(struct sdti *, char *, char *);
+void sdtiToBin(struct sdti *, FILE *);
+void ldrExpress(struct sdti *, char *);
+
 
 //API for hashtable
 unsigned int hash(char *);
@@ -126,7 +154,7 @@ void writer(char *str, FILE *outFile) {
                 parseMi(test, outFile);
                 break;
             case 3:
-                //TODO single data transfer
+                parseSdti(test, outFile);
                 break;
             case 4:
                 //TODO branch instruction
@@ -376,7 +404,180 @@ void dpiToBin(struct dpi *ins, FILE *file) {
     free(start);
 }
 
+void removeChar(char *str, char garbage) {
 
+    char *src, *dst;
+    for (src = dst = str; *src != '\0'; src++) {
+        *dst = *src;
+        if (*dst != garbage) dst++;
+    }
+    *dst = '\0';
+}
+
+int isSquare(char *str) {
+    char *src = str;
+    for(;*src != '\0';src++) {
+        if(*src == ']') {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+void helpParseRnRmU(struct sdti *ins, char *express) {
+    char *test = express;
+
+    switch(*test) {
+        case '#' :
+            ins->i = 0;
+            if(*(test+1) == '-') {
+                ins->u = 0;
+                ins->offs = getVal(test+1);
+            } else {
+                ins->u = 1;
+                ins->offs = getVal(test);
+            }
+
+            break;
+        case '-':
+            ins->i = 1;
+            ins->u = 0;
+            //do later for shriting
+            ins-> offs = getVal(test+1);
+            break;
+        case 'r':
+            ins->i = 1;
+            //do later for shriting
+            ins->u = 1;
+            ins->offs = getVal(test);
+
+            break;
+        default:
+            fprintf(stderr, "not a shifted register\n");
+            exit(1);
+    }
+}
+
+void parseRnRmU(struct sdti *ins, char *rn, char *express) {
+
+    ins->rn = getVal(rn+1);
+    if (express == NULL) {
+        ins->p = 1;
+        ins->u = 1;
+        ins->offs = 0;
+        ins->i = 0;
+        return;
+    }
+
+    switch(isSquare(rn)) {
+        case 1:
+            ins->p = 0;
+            break;
+        case 0:
+            ins->p = 1;
+            break;
+        default:
+            fprintf(stderr, "problem\n");
+            exit(1);
+    }
+    helpParseRnRmU(ins, express);
+}
+
+
+void sdtiToBin(struct sdti *ins, FILE *file) {
+    unsigned char *start;
+    start = (unsigned char *) calloc(4, sizeof(unsigned char));
+
+
+    *start |= (ins->cond) << 4;
+    *start |= (ins->id)   << 2;
+    *start |= (ins->i)    << 1;
+    *start |= (ins->p);
+
+    *(start+1) |= (ins->u) << 7;
+    *(start+1) |= (ins->id2) << 5;
+    *(start+1) |= (ins->l) << 4;
+    *(start+1) |= (ins->rn);
+
+    *(start+2) |= (ins->rd) << 4;
+    *(start+2) |= (ins->offs) >> 8;
+
+    *(start+3) |= ins->offs;
+
+    endianConvert(start);
+    fwrite(start, sizeof(unsigned char), 4, file);
+    free(start);
+}
+
+void ldrExpress(struct sdti *ins, char *str) {
+    int compare = (int) strtol("OxFF", NULL, 16);
+    int value = (int) strtol(str+1, NULL, 16);
+
+    if(value <= compare) {
+        //mov
+        printf("mov");
+        exit(1);
+    } else {
+        printf("pc");
+        exit(1);
+    }
+}
+
+struct sdti *sdtiConvert(char *str) {
+    char *test = str;
+    struct sdti *ins = (struct sdti*) malloc(sizeof(struct sdti));
+
+    char *opcode, *rd, *express;
+    char *rnOrExp;
+
+    opcode  = strtok_r(test, " ", &test); //str
+    removeChar(test, ' ');
+    rd      = strtok_r(test, ",", &test); //r0
+    rnOrExp = strtok_r(test, ",", &test); //[r1, or [r2]
+    express = strtok_r(test, "]", &test); //r4
+
+    ins->cond = 14;
+    ins->id = 1;
+    ins->id2 = 0;
+    ins->rd = getVal(rd);
+
+    switch (*(opcode)) {
+        case 'l':
+            ins->l = 1;
+            switch(*(rnOrExp)) {
+                case '=':
+                    ldrExpress(ins, rnOrExp);
+                    break;
+                case '[':
+                    parseRnRmU(ins, rnOrExp, express);
+                    break;
+                default:
+                    fprintf(stderr, "not a valid rn");
+                    exit(1);
+            }
+            break;
+        case 's':
+            ins->l = 0;
+            parseRnRmU(ins, rnOrExp, express);
+            break;
+        default:
+            fprintf(stderr, "it's not a sdti ins\n");
+            exit(1);
+    }
+
+
+    return ins;
+}
+
+void parseSdti(char *lineBuffer, FILE *outFile) {
+    struct sdti *ins = (struct sdti*) malloc(sizeof(struct sdti));
+
+    ins = sdtiConvert(lineBuffer);
+    sdtiToBin(ins, outFile);
+
+    free(ins);
+}
 
 unsigned int hash(char *s) {
     unsigned int hashval;

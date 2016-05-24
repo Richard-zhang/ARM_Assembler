@@ -19,6 +19,10 @@ struct state {
     uint32_t fetched; 
 };
 
+typedef enum instructionType {
+    DP = 0, MUL = 1, SDT = 2, BR = 3
+} Instruction;
+
 // Functions used to check condition 
 int checkCond(uint32_t cond);
 int checkZ(void);
@@ -33,9 +37,9 @@ uint32_t multInstr(uint32_t instr);
 uint32_t accMultInstr(uint32_t instr);
 
 // Main utility functions
-int checkInstruction(uint32_t instr);
-int checkCaseOne(uint32_t instr);
-int checkCaseTwo(uint32_t instr);
+Instruction checkInstruction(uint32_t instr);
+Instruction checkCaseOne(uint32_t instr);
+Instruction checkCaseTwo(uint32_t instr);
 void printState(void);
 void simulatePipeline(struct state *ARMState);
 
@@ -69,8 +73,12 @@ uint32_t createMask(uint32_t top, uint32_t bot);
 int main(int argc, char **argv) {
     assert(argc == 2); 
     
-    // Allocating space for the main memory 
+    // Allocates space for the main memory and checks for error 
     mainMem = calloc(MAX_SIZE, sizeof(char)); 
+    if (mainMem == NULL) { 
+        perror("calloc");
+        exit(EXIT_FAILURE);   
+    }
     
     // Declaring the binary file  
     FILE *binFile; 
@@ -87,12 +95,19 @@ int main(int argc, char **argv) {
     // Closes and disassociates the binary file  
     fclose(binFile); 
      
-    // Allocating space for the registers 
+    // Allocates space for the registers and checks for error
     regFile = calloc(NUM_REG, sizeof(int));    
-    
-    // Stores the current state of the ARM machine  
+    if (regFile == NULL) { 
+        perror("calloc");
+        exit(EXIT_FAILURE);   
+    }  
+ 
+    // Stores the current state of the ARM machine and checks for error  
     struct state *ARMState = (struct state*) malloc(sizeof(struct state)); 
-    assert(ARMState != NULL);     
+    if (ARMState == NULL) { 
+        perror("malloc");
+        exit(EXIT_FAILURE);   
+    }     
    
     // Begins the pipeline process  
     simulatePipeline(ARMState); 
@@ -102,7 +117,7 @@ int main(int argc, char **argv) {
     free(regFile);
     free(ARMState);
  
-    return 0;    
+    return EXIT_SUCCESS;    
 }
 
 /* Simulates the pipeline process which executes, decodes and fetches 
@@ -134,23 +149,23 @@ void simulatePipeline(struct state *ARMState) {
            the instruction will be executed or not */ 
         condReg = getBits(31, 28, ARMState->decoded);  
         if (checkCond(condReg) == 1){
-            int instrType = checkInstruction(ARMState->decoded);
-            switch(instrType) {
+            Instruction type = checkInstruction(ARMState->decoded);
+            switch(type) {
                 // DATA PROCESSING
-                case 0  :
+                case DP  :
                     dataProcessInstr(ARMState->decoded);  
                     break;
                 // MULTIPLY 
-                case 1  : 
+                case MUL  : 
                     mult(ARMState->decoded); 
                     break;  
                 // SINGLE DATA TRANSFER
-                case 2  : 
+                case SDT  : 
                     singleDataTransfer(ARMState->decoded); 
                     break;  
                 // BRANCH    
                 default :
-                    assert(instrType == 3); 
+                    assert(type == BR); 
                     int offset = branch(ARMState->decoded); 
                     regFile[PC] += offset;   
                     
@@ -206,13 +221,13 @@ uint32_t getInteger(uint32_t firstByteAddr) {
 
 /*Determines the type of the instruction. Returns 0 if Data Processing, 
 1 if multiply, 2 if Single Data Transfer, and 3 if Branch. */ 
-int checkInstruction(uint32_t instr) {  
+Instruction checkInstruction(uint32_t instr) {  
     // If bit 27 is set then the type is Branch    
     if (getBits(27, 27, instr) == 1) {
-        return 3;
+        return BR;
     // If bit 26 is set then the type is Single Data Transfer
     } else if (getBits(26, 26, instr) == 1) {
-        return 2;
+        return SDT;
     } else {
         return checkCaseOne(instr);    
     }
@@ -244,12 +259,12 @@ int checkCond(uint32_t cond) {
 
 /* Determines whether the instruction is a Data Processing or Multiply
 instruction by checking specific bits */ 
-int checkCaseOne(uint32_t instr) {
+Instruction checkCaseOne(uint32_t instr) {
     if (getBits(25, 25, instr) == 1) { 
-        return 0;
+        return DP;
     } else {
         if (getBits(4, 4, instr) == 0) { 
-            return 0;
+            return DP;
         } else {
             return checkCaseTwo(instr);    
         } 
@@ -258,11 +273,11 @@ int checkCaseOne(uint32_t instr) {
 
 /* Determines whether the instruction is a Data Processing or Multiply
 instruction by checking specific bits */ 
-int checkCaseTwo(uint32_t instr) { 
+Instruction checkCaseTwo(uint32_t instr) { 
     if (getBits(7, 7, instr) == 0) { 
-        return 0;
+        return DP;
     } else {
-        return 1; 
+        return MUL; 
     }
 }
 
