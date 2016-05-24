@@ -103,7 +103,7 @@ int getVal(char *);
 
 //parsing special instructions
 void parseSi(char *, FILE *);
-void parselslI(char *, FILE *);
+void parselsli(char *, FILE *);
 struct lsli *lsliConvert(char *);
 void lsliToBin(struct lsli *, FILE *);
 //end

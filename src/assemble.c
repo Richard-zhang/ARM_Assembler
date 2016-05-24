@@ -46,7 +46,7 @@ void writer(char *str, FILE *outFile) {
                 //TODO branch instruction
                 break;
             case 5:
-                parseSi(test, outFile); 
+                parseSi(test, outFile);
                 break;
             default:
                 //possible extension
@@ -65,68 +65,59 @@ void writer(char *str, FILE *outFile) {
 
 void parseSi(char *lineBuffer, FILE *outFile) {
     switch(*lineBuffer) {
-        
+
         unsigned char *instr;
-        case 'a':  
+        case 'a':
             instr = (unsigned char*) calloc(4, sizeof(unsigned char));
             isEnoughSpace(instr);
             fwrite(instr, sizeof(unsigned char), 4, outFile);
-            free(instr);           
-            break;  
-        case 'l': 
-            parselslI(lineBuffer, outFile);
+            free(instr);
+            break;
+        case 'l':
+            parselsli(lineBuffer, outFile);
             break;
         default:
             fprintf(stderr, "unidentified command\n");
             exit(1);
-            break;   
+            break;
     }
 }
 
-void parselslI(char *lineBuffer, FILE *outFile) { 
+void parselsli(char *lineBuffer, FILE *outFile) {
     struct lsli *ins = (struct lsli*) malloc(sizeof(struct lsli));
     isEnoughSpace(ins);
 
     ins = lsliConvert(lineBuffer);
     lsliToBin(ins, outFile);
 
-    free(ins);  
+    free(ins);
 }
 
 struct lsli *lsliConvert(char *str) {
-    char *test = str; 
-    char *opcode, *rd, *rn, *expr;
+    char *test = str;
+    char *rn, *expr;
     struct lsli *ins = (struct lsli*) malloc(sizeof(struct lsli));
     isEnoughSpace(ins);
 
     strtok_r(test, " ", &test);
-    opcode = "mov";
-    rn = strtok_r(test, ",", &test); 
-    ins->cond = 14;  
-    ins->iden = (int) strtol("0", NULL, 10);
-    ins->i = (int) strtol("0", NULL, 10);
-    ins->opcode = (int) strtol("1101", NULL, 10);
-   
-    ins->s = (int) strtol("0", NULL, 10); 
-    ins->rn = (int) strtol("0", NULL, 10);
-    int s = (int) strtol(rn + 1, NULL, 10);
-    ins->rd = s;   
+    rn = strtok_r(test, ",", &test);
+    ins->cond = 14;
+    ins->iden = 0;
+    ins->i = 0;
+    ins->opcode = 13;
+    ins->s = 0;
+    ins->rn = 0;
+    int s = getVal(rn);
+    ins->rd = s;
     expr = strtok_r(test, " ", &test);
-    switch(*(expr + 2)) {
-        int exprNum; 
-        case 'x' : 
-            exprNum   = (int) strtol(expr + 1, NULL, 16);   
-            exprNum <<= 7;
-            exprNum  |= ins->rd;
-            ins->operand = exprNum; 
-            break;  
-        default  :
-            exprNum   = (int) strtol(expr + 1, NULL, 10);
-            exprNum <<= 7;
-            exprNum  |= ins->rd;
-            ins->operand = exprNum;
-            break;
-    }    
+
+    int exprNum = (*(expr+2) == 'x') ?
+        (int) strtol(expr + 1, NULL, 16) : getVal(expr);
+
+    exprNum <<= 7;
+    exprNum  |= ins->rd;
+    ins->operand = exprNum;
+
     return ins;
 }
 
@@ -139,21 +130,19 @@ void lsliToBin(struct lsli *ins, FILE *file) {
     *start |= ins->iden << 2;
     *start |= ins->i << 1;
     *start |= ins->opcode >> 3;
-    
+
     *(start+1) |= (ins->opcode << 1) << 4;
     *(start+1) |= ins->s << 4;
     *(start+1) |= ins->rn;
-      
+
     *(start+2) |= ins->rd << 4;
     *(start+2) |= ins->operand >> 8;
 
-    *(start+3) |= ins->operand; 
+    *(start+3) |= ins->operand;
 
     endianConvert(start);
     fwrite(start, sizeof(unsigned char), 4, file);
-
-    free(start); 
-
+    free(start);
 }
 
 void parseMi(char *lineBuffer, FILE *outFile) {
