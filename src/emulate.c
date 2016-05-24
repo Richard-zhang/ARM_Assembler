@@ -70,9 +70,14 @@ uint32_t createMask(uint32_t top, uint32_t bot);
 int main(int argc, char **argv) {
     assert(argc == 2); 
     
-    // Allocating space for the main memory 
+    // Allocates space for the main memory and checks for error 
     uint8_t *mainMem = calloc(MAX_SIZE, sizeof(char)); 
+    if (mainMem == NULL) { 
+        perror("calloc");
+        exit(EXIT_FAILURE);   
+    }
     
+     
     // Declaring the binary file  
     FILE *binFile; 
      
@@ -88,12 +93,19 @@ int main(int argc, char **argv) {
     // Closes and disassociates the binary file  
     fclose(binFile); 
      
-    // Allocating space for the registers 
+    // Allocates space for the registers and checks for error
     uint32_t *regFile = calloc(NUM_REG, sizeof(int));    
-    
-    // Stores the current state of the ARM machine  
+    if (regFile == NULL) { 
+        perror("calloc");
+        exit(EXIT_FAILURE);   
+    }  
+ 
+    // Stores the current state of the ARM machine and checks for error  
     struct state *ARMState = (struct state*) malloc(sizeof(struct state)); 
-    assert(ARMState != NULL);     
+    if (ARMState == NULL) { 
+        perror("malloc");
+        exit(EXIT_FAILURE);   
+    }     
    
     // Begins the pipeline process  
     simulatePipeline(mainMem, regFile, ARMState); 
@@ -103,7 +115,7 @@ int main(int argc, char **argv) {
     free(regFile);
     free(ARMState);
  
-    return 0;    
+    return EXIT_SUCCESS;    
 }
 
 /* Simulates the pipeline process which executes, decodes and fetches 
