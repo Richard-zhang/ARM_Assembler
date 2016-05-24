@@ -1,114 +1,4 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#define MAX_LINE  32
-#define HASH_SIZE 101
-#define NUM_INS   101
-
-typedef enum {
-    ADD=1,SUB=1,RSB=1,AND=1,EOR=1,ORR=1,MOV=1,TST=1,TEQ=1,CMP=1,
-    MUL=2,MLA=2,LDR=3,STR=3,BEQ=4,BNE=4,BGE=4,BLT=4,BGT=4,
-    BLE=4,B  =4,LSL=5,ANDEQ=5
-} Ins;
-
-struct elem {
-    struct elem *next;
-    char *name;
-    Ins defn;
-};
-
-static struct elem *hashMap[NUM_INS];
-//create hash table and entry for hashtable
-static struct entry *hashTable[HASH_SIZE];
-
-struct entry {
-    struct entry *next;
-    char *name;
-    char *defn;
-};
-
-//data processing instruction format
-struct dpi {
-    unsigned int cond    : 4;
-    unsigned int iden    : 2;
-    unsigned int i       : 1;
-    unsigned int opcode  : 4;
-    unsigned int s       : 1;
-    unsigned int rn      : 4;
-    unsigned int rd      : 4;
-    unsigned int operand : 12;
-};
-
-//multiply instruction format
-struct mi {
-    unsigned int cond : 4;
-    unsigned int id1  : 6;
-    unsigned int a    : 1;
-    unsigned int s    : 1;
-    unsigned int rd   : 4;
-    unsigned int rn   : 4;
-    unsigned int rs   : 4;
-    unsigned int id2  : 4;
-    unsigned int rm   : 4;
-};
-
-struct ani {
-    unsigned int instr : 32;
-};
-
-struct lsli {
-    unsigned int cond    : 4;
-    unsigned int iden    : 2;
-    unsigned int i       : 1;
-    unsigned int opcode  : 4;
-    unsigned int s       : 1;
-    unsigned int rn      : 4;
-    unsigned int rd      : 4;
-    unsigned int operand : 12;
-};
-
-//grand design
-void writer(char *, FILE *);
-//parsing data processing instructions
-void parseDpi(char *, FILE *);
-
-void dpiToBin(struct dpi *, FILE *);
-struct dpi *dpiConvert(char *);
-int  getOpVal(char *);
-void setIflagAndOper(struct dpi *, char *);
-void setRd(struct dpi *, char *);
-void setRn(struct dpi *, char *);
-//end
-
-//parsing mulitple instructions
-void parseMi(char *, FILE *);
-
-void miToBin(struct mi *, FILE *);
-struct mi *miConvert(char *);
-int getVal(char *);
-//end
-
-//parsing special instructions
-void parseSi(char *, FILE *);
-void parselslI(char *, FILE *); 
-struct lsli *lsliConvert(char *);
-void lsliToBin(struct lsli *, FILE *);
-//end
-
-//API for hashtable
-unsigned int hash(char *);
-unsigned int hashTwo(char *);
-struct entry *lookup(char *);
-struct entry *put(char *, char *);
-struct elem *find(char *);
-struct elem *install(char *, Ins);
-void setup();
-Ins typeId(char *);
-
-//utility functions
-void isEnoughSpace(void *);
-void endianConvert(unsigned char *);
-void swap(unsigned char *, unsigned char *);
+#include "assemble.h"
 
 int main(int argc, char **argv) {
     //create a symbol table
@@ -148,7 +38,7 @@ void writer(char *str, FILE *outFile) {
                 parseMi(test, outFile);
                 break;
             case 3:
-                //TODO single data transfer
+                parseSdti(test, outFile);
                 break;
             case 4:
                 //TODO branch instruction
@@ -488,7 +378,180 @@ void dpiToBin(struct dpi *ins, FILE *file) {
     free(start);
 }
 
+void removeChar(char *str, char garbage) {
 
+    char *src, *dst;
+    for (src = dst = str; *src != '\0'; src++) {
+        *dst = *src;
+        if (*dst != garbage) dst++;
+    }
+    *dst = '\0';
+}
+
+int isSquare(char *str) {
+    char *src = str;
+    for(;*src != '\0';src++) {
+        if(*src == ']') {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+void helpParseRnRmU(struct sdti *ins, char *express) {
+    char *test = express;
+
+    switch(*test) {
+        case '#' :
+            ins->i = 0;
+            if(*(test+1) == '-') {
+                ins->u = 0;
+                ins->offs = getVal(test+1);
+            } else {
+                ins->u = 1;
+                ins->offs = getVal(test);
+            }
+
+            break;
+        case '-':
+            ins->i = 1;
+            ins->u = 0;
+            //do later for shriting
+            ins-> offs = getVal(test+1);
+            break;
+        case 'r':
+            ins->i = 1;
+            //do later for shriting
+            ins->u = 1;
+            ins->offs = getVal(test);
+
+            break;
+        default:
+            fprintf(stderr, "not a shifted register\n");
+            exit(1);
+    }
+}
+
+void parseRnRmU(struct sdti *ins, char *rn, char *express) {
+
+    ins->rn = getVal(rn+1);
+    if (express == NULL) {
+        ins->p = 1;
+        ins->u = 1;
+        ins->offs = 0;
+        ins->i = 0;
+        return;
+    }
+
+    switch(isSquare(rn)) {
+        case 1:
+            ins->p = 0;
+            break;
+        case 0:
+            ins->p = 1;
+            break;
+        default:
+            fprintf(stderr, "problem\n");
+            exit(1);
+    }
+    helpParseRnRmU(ins, express);
+}
+
+
+void sdtiToBin(struct sdti *ins, FILE *file) {
+    unsigned char *start;
+    start = (unsigned char *) calloc(4, sizeof(unsigned char));
+
+
+    *start |= (ins->cond) << 4;
+    *start |= (ins->id)   << 2;
+    *start |= (ins->i)    << 1;
+    *start |= (ins->p);
+
+    *(start+1) |= (ins->u) << 7;
+    *(start+1) |= (ins->id2) << 5;
+    *(start+1) |= (ins->l) << 4;
+    *(start+1) |= (ins->rn);
+
+    *(start+2) |= (ins->rd) << 4;
+    *(start+2) |= (ins->offs) >> 8;
+
+    *(start+3) |= ins->offs;
+
+    endianConvert(start);
+    fwrite(start, sizeof(unsigned char), 4, file);
+    free(start);
+}
+
+void ldrExpress(struct sdti *ins, char *str) {
+    int compare = (int) strtol("OxFF", NULL, 16);
+    int value = (int) strtol(str+1, NULL, 16);
+
+    if(value <= compare) {
+        //mov
+        printf("mov");
+        exit(1);
+    } else {
+        printf("pc");
+        exit(1);
+    }
+}
+
+struct sdti *sdtiConvert(char *str) {
+    char *test = str;
+    struct sdti *ins = (struct sdti*) malloc(sizeof(struct sdti));
+
+    char *opcode, *rd, *express;
+    char *rnOrExp;
+
+    opcode  = strtok_r(test, " ", &test); //str
+    removeChar(test, ' ');
+    rd      = strtok_r(test, ",", &test); //r0
+    rnOrExp = strtok_r(test, ",", &test); //[r1, or [r2]
+    express = strtok_r(test, "]", &test); //r4
+
+    ins->cond = 14;
+    ins->id = 1;
+    ins->id2 = 0;
+    ins->rd = getVal(rd);
+
+    switch (*(opcode)) {
+        case 'l':
+            ins->l = 1;
+            switch(*(rnOrExp)) {
+                case '=':
+                    ldrExpress(ins, rnOrExp);
+                    break;
+                case '[':
+                    parseRnRmU(ins, rnOrExp, express);
+                    break;
+                default:
+                    fprintf(stderr, "not a valid rn");
+                    exit(1);
+            }
+            break;
+        case 's':
+            ins->l = 0;
+            parseRnRmU(ins, rnOrExp, express);
+            break;
+        default:
+            fprintf(stderr, "it's not a sdti ins\n");
+            exit(1);
+    }
+
+
+    return ins;
+}
+
+void parseSdti(char *lineBuffer, FILE *outFile) {
+    struct sdti *ins = (struct sdti*) malloc(sizeof(struct sdti));
+
+    ins = sdtiConvert(lineBuffer);
+    sdtiToBin(ins, outFile);
+
+    free(ins);
+}
 
 unsigned int hash(char *s) {
     unsigned int hashval;
