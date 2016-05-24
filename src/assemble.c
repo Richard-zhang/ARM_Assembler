@@ -1,11 +1,13 @@
 #include "assemble.h"
+FILE *outFile;
+int IsError = 0;
 
 int main(int argc, char **argv) {
     //create a symbol table
     setup();
 
     FILE *inFile;
-    FILE *outFile;
+    //FILE *outFile;
     inFile    = fopen(argv[1], "r");
     outFile   = fopen(argv[2], "wb");
     char lineBuffer[MAX_LINE];
@@ -55,7 +57,6 @@ void writer(char *str, FILE *outFile) {
                 //then suggest the possible command
                 fprintf(stderr, "unidentify command\n");
                 exit(1);
-                break;
         }
 
     } else {
@@ -120,6 +121,8 @@ struct lsli *lsliConvert(char *str) {
 
     return ins;
 }
+
+
 
 void lsliToBin(struct lsli *ins, FILE *file) {
     unsigned char *start;
@@ -195,7 +198,6 @@ struct mi *miConvert(char *str) {
         default:
             fprintf(stderr, "Something is wrong\n");
             exit(1);
-            break;
     }
 
     return ins;
@@ -478,14 +480,28 @@ void sdtiToBin(struct sdti *ins, FILE *file) {
     free(start);
 }
 
-void ldrExpress(struct sdti *ins, char *str) {
-    int compare = (int) strtol("OxFF", NULL, 16);
+char *combine(char *ptr1, char *ptr2) {
+    char *str;
+    str = (char *) malloc(sizeof(char));
+    str = strcat(str, "mov ");
+    str = strcat(str, ptr1);
+    str = strcat(str, ",");
+    str = strcat(str, ptr2);
+    return str;
+}
+
+void ldrExpress(struct sdti *ins, char *str, char *rn) {
+    char *s;
+    s = "0xFF";
+    int compare = (int) strtol(s, NULL, 16);
     int value = (int) strtol(str+1, NULL, 16);
 
     if(value <= compare) {
-        //mov
-        printf("mov");
-        exit(1);
+        *str = '#';
+        char *lineBuffer = combine(rn, str);
+        parseDpi(lineBuffer, outFile);
+        free(lineBuffer);
+        IsError = 1;
     } else {
         printf("pc");
         exit(1);
@@ -515,7 +531,7 @@ struct sdti *sdtiConvert(char *str) {
             ins->l = 1;
             switch(*(rnOrExp)) {
                 case '=':
-                    ldrExpress(ins, rnOrExp);
+                    ldrExpress(ins, rnOrExp, rd);
                     break;
                 case '[':
                     parseRnRmU(ins, rnOrExp, express);
@@ -542,8 +558,11 @@ void parseSdti(char *lineBuffer, FILE *outFile) {
     struct sdti *ins = (struct sdti*) malloc(sizeof(struct sdti));
 
     ins = sdtiConvert(lineBuffer);
+    if(IsError) {
+        IsError = 0;
+        return;
+    }
     sdtiToBin(ins, outFile);
-
     free(ins);
 }
 
