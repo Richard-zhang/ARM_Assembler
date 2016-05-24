@@ -95,8 +95,8 @@ void setRn(struct dpi *, char *);
 
 //parsing mulitple instructions
 void parseMi(char *, FILE *);
-
 void miToBin(struct mi *, FILE *);
+
 struct mi *miConvert(char *);
 int getVal(char *);
 //end

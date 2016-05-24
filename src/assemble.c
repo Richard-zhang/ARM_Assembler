@@ -63,12 +63,14 @@ void writer(char *str, FILE *outFile) {
 
 void parseSi(char *lineBuffer, FILE *outFile) {
     switch(*lineBuffer) {
-        unsigned char *zeroes;
-        case 'a': 
-            zeroes = calloc(8, sizeof(unsigned char));
-            fwrite(zeroes, sizeof(unsigned char), sizeof(int), outFile);
-            free(zeroes);  
-            break;
+        
+        unsigned char *instr;
+        case 'a':  
+            instr = (unsigned char*) calloc(4, sizeof(unsigned char));
+            isEnoughSpace(instr);
+            fwrite(instr, sizeof(unsigned char), 4, outFile);
+            free(instr);           
+            break;  
         case 'l': 
             parselslI(lineBuffer, outFile);
             break;
@@ -95,32 +97,31 @@ struct lsli *lsliConvert(char *str) {
     struct lsli *ins = (struct lsli*) malloc(sizeof(struct lsli));
     isEnoughSpace(ins);
 
-    opcode = "mov";
     strtok_r(test, " ", &test);
-    rd = strtok_r(test, ",", &test); 
-    ins->cond = (int) strtol("1101", NULL, 10); 
-    ins->iden = (int) strtol("00", NULL, 10);
+    opcode = "mov";
+    rn = strtok_r(test, ",", &test); 
+    ins->cond = 14;  
+    ins->iden = (int) strtol("0", NULL, 10);
     ins->i = (int) strtol("0", NULL, 10);
-    ins->opcode = (int) strtol("1101", NULL, 10); 
-    ins->s = (int) strtol("0", NULL, 10);
+    ins->opcode = (int) strtol("1101", NULL, 10);
+   
+    ins->s = (int) strtol("0", NULL, 10); 
     ins->rn = (int) strtol("0", NULL, 10);
-    int s = (int) strtol(rd+1, NULL, 10);
-    ins-> rd = s;   
-  
+    int s = (int) strtol(rn + 1, NULL, 10);
+    ins->rd = s;   
     expr = strtok_r(test, " ", &test);
-    
     switch(*(expr + 2)) {
         int exprNum; 
         case 'x' : 
             exprNum   = (int) strtol(expr + 1, NULL, 16);   
             exprNum <<= 7;
-            exprNum  |= ins->rn;
+            exprNum  |= ins->rd;
             ins->operand = exprNum; 
             break;  
         default  :
             exprNum   = (int) strtol(expr + 1, NULL, 10);
             exprNum <<= 7;
-            exprNum  |= ins->rn;
+            exprNum  |= ins->rd;
             ins->operand = exprNum;
             break;
     }    
@@ -132,10 +133,10 @@ void lsliToBin(struct lsli *ins, FILE *file) {
     start = (unsigned char*) calloc(4, sizeof(unsigned char));
     isEnoughSpace(start);
 
-    *start |= ins -> cond << 4;
-    *start |= ins -> iden << 2;
-    *start |= ins -> i << 1; 
-    *start |= ins -> opcode >> 3;
+    *start |= ins->cond << 4;
+    *start |= ins->iden << 2;
+    *start |= ins->i << 1;
+    *start |= ins->opcode >> 3;
     
     *(start+1) |= (ins->opcode << 1) << 4;
     *(start+1) |= ins->s << 4;
