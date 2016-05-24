@@ -1,87 +1,15 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <assert.h>
-#include <limits.h>
-
-#define CPSR 16
-#define PC 15
-#define NUM_REG 17
-#define GEN_REG 13
-#define MAX_SIZE 65536
-
-struct state {
-    uint32_t decoded;
-    uint32_t fetched; 
-};
-
-typedef enum instructionType {
-    DP = 0, MUL = 1, SDT = 2, BR = 3
-} Instruction;
-
-// Functions used to check condition 
-int checkCond(uint32_t cond, uint32_t CPSRpntr);
-int checkZ(uint32_t CPSRpntr);
-int equalityNV(uint32_t CPSRpntr);
-
-// Branch functions
-int branch(uint32_t instr);
-
-// Multiply functions
-void mult(uint32_t *regFile, uint32_t instr);
-uint32_t multInstr(uint32_t *regFile, uint32_t instr);
-uint32_t accMultInstr(uint32_t *regFile, uint32_t instr);
-
-// Main utility functions
-Instruction checkInstruction(uint32_t instr);
-Instruction checkCaseOne(uint32_t instr);
-Instruction checkCaseTwo(uint32_t instr);
-void printState(uint32_t *regFile, uint8_t *mainMem);
-void simulatePipeline(uint8_t *mainMem, uint32_t *regFile, 
-    struct state *ARMState);
-
-// Single Data Transfer functions
-void singleDataTransfer(uint8_t *mainMem, uint32_t *regFile, uint32_t instr);
-uint32_t logicalLeftShift(uint32_t amount, uint32_t value);
-uint32_t logicalRightShift(uint32_t amount, uint32_t value);
-uint32_t arithmeticRightShift(uint32_t amount, uint32_t value);
-uint32_t rotateRight(uint32_t amount, uint32_t value);
-uint32_t getShiftAmount(uint32_t *regFile, uint32_t operand);
-void storeData(uint8_t *mainMem, uint32_t *regFile, 
-    uint32_t source, uint32_t index);
-void loadData(uint8_t *mainMem, uint32_t *regFile, 
-    uint32_t dest, uint32_t index);
-
-// Data Proccessing Instructions
-void dataProcessInstr(uint32_t *regFile, uint32_t instr);
-uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand);
-uint32_t evaluateImmediateValue(uint32_t operand);
-uint32_t executeOpcode(uint32_t *regFile, uint32_t opcode, uint32_t regN,
-                     uint32_t op2);
-uint32_t getCarryFromShifter(uint32_t *regFile, uint32_t op2);
-uint32_t isOverflow(uint32_t int1, uint32_t int2);
-uint32_t getCarryFromALU(uint32_t *regFile, uint32_t instr, uint32_t op2,
-                         uint32_t *CPSRreg);
-
-// Utility functions
-void setCPSRBit(uint32_t *CPSRreg, uint32_t bit, uint32_t value);
-uint32_t getInteger(uint8_t *mainMem, uint32_t firstByteAddr);
-uint32_t switchEndian(uint32_t num); 
-uint32_t getBits(int leftmost, int rightmost, uint32_t num);
-uint32_t createMask(uint32_t top, uint32_t bot); 
-
+#include "emulate.h"
 
 int main(int argc, char **argv) {
     assert(argc == 2); 
     
     // Allocates space for the main memory and checks for error 
-    uint8_t *mainMem = calloc(MAX_SIZE, sizeof(char)); 
+    mainMem = calloc(MAX_SIZE, sizeof(char)); 
     if (mainMem == NULL) { 
         perror("calloc");
         exit(EXIT_FAILURE);   
     }
     
-     
     // Declaring the binary file  
     FILE *binFile; 
      
@@ -98,7 +26,7 @@ int main(int argc, char **argv) {
     fclose(binFile); 
      
     // Allocates space for the registers and checks for error
-    uint32_t *regFile = calloc(NUM_REG, sizeof(int));    
+    regFile = calloc(NUM_REG, sizeof(int));    
     if (regFile == NULL) { 
         perror("calloc");
         exit(EXIT_FAILURE);   
@@ -112,7 +40,7 @@ int main(int argc, char **argv) {
     }     
    
     // Begins the pipeline process  
-    simulatePipeline(mainMem, regFile, ARMState); 
+    simulatePipeline(ARMState); 
     
     // frees up dynamic memory
     free(mainMem);
@@ -124,8 +52,7 @@ int main(int argc, char **argv) {
 
 /* Simulates the pipeline process which executes, decodes and fetches 
 instructions from the main memory */  
-void simulatePipeline(uint8_t *mainMem, uint32_t *regFile, 
-    struct state *ARMState) { 
+void simulatePipeline(struct state *ARMState) { 
    
     ARMState->decoded = 0;
     ARMState->fetched = 0; 
@@ -133,11 +60,11 @@ void simulatePipeline(uint8_t *mainMem, uint32_t *regFile,
     /* The pipeline begins its execution. The first instruction is fetched and 
     then decoded.*/
     
-    ARMState->fetched = getInteger(mainMem, 0);       
+    ARMState->fetched = getInteger(0);       
     regFile[PC] += sizeof(int); 
  
     ARMState->decoded = ARMState->fetched; 
-    ARMState->fetched = getInteger(mainMem, regFile[PC]);    
+    ARMState->fetched = getInteger(regFile[PC]);    
     regFile[PC] += sizeof(int);  
     uint32_t condReg;    
     
@@ -151,20 +78,20 @@ void simulatePipeline(uint8_t *mainMem, uint32_t *regFile,
         /* Checks the condition code of the instruction, which specifies whether
            the instruction will be executed or not */ 
         condReg = getBits(31, 28, ARMState->decoded);  
-        if (checkCond(condReg, *(regFile + CPSR)) == 1){
+        if (checkCond(condReg) == 1){
             Instruction type = checkInstruction(ARMState->decoded);
             switch(type) {
                 // DATA PROCESSING
                 case DP  :
-                    dataProcessInstr(regFile, ARMState->decoded);  
+                    dataProcessInstr(ARMState->decoded);  
                     break;
                 // MULTIPLY 
                 case MUL  : 
-                    mult(regFile, ARMState->decoded); 
+                    mult(ARMState->decoded); 
                     break;  
                 // SINGLE DATA TRANSFER
                 case SDT  : 
-                    singleDataTransfer(mainMem, regFile, ARMState->decoded); 
+                    singleDataTransfer(ARMState->decoded); 
                     break;  
                 // BRANCH    
                 default :
@@ -173,20 +100,20 @@ void simulatePipeline(uint8_t *mainMem, uint32_t *regFile,
                     regFile[PC] += offset;   
                     
                     // Fetched is the instruction at PC + offset  
-                    ARMState->fetched = getInteger(mainMem, regFile[PC]);    
+                    ARMState->fetched = getInteger(regFile[PC]);    
                     regFile[PC] += sizeof(int);
                     break;   
             }    
         } 
         // fetched instruction becomes decoded, and new instruction is fetched
         ARMState->decoded = ARMState->fetched;
-        ARMState->fetched = getInteger(mainMem, regFile[PC]);  
+        ARMState->fetched = getInteger(regFile[PC]);  
         // PC = PC + 4;  
         regFile[PC] += sizeof(int);   
     }
 
     // prints the state of processor upon termination
-    printState(regFile, mainMem); 
+    printState(); 
 }  
 
 /* Selects the bits from a range when given a leftmost and a rightmost bit, 
@@ -211,7 +138,7 @@ uint32_t switchEndian(uint32_t num) {
 
 /* Extracts the first 4 bytes from the address and merges them into a 32 bit
 instruction in Big Endian */ 
-uint32_t getInteger(uint8_t *mainMem, uint32_t firstByteAddr) { 
+uint32_t getInteger(uint32_t firstByteAddr) { 
     uint32_t firstByte = mainMem[firstByteAddr];
     firstByte <<= (CHAR_BIT * 3);
     uint32_t secondByte = mainMem[firstByteAddr + sizeof(uint8_t)]; 
@@ -240,20 +167,20 @@ Instruction checkInstruction(uint32_t instr) {
 /* This function is used to check the condition of the instruction.
    It calls helper functions checkZ and equalityNV to return a value
    of 1 if the condition is met, or 0 if the condition is not met. */
-int checkCond(uint32_t cond, uint32_t CPSRreg) {
+int checkCond(uint32_t cond) {
     switch(cond) {
         case 0  : 
-            return checkZ(CPSRreg); 
+            return checkZ(); 
         case 1  : 
-            return !checkZ(CPSRreg);
+            return !checkZ();
         case 10 : 
-            return equalityNV(CPSRreg);
+            return equalityNV();
         case 11 : 
-            return !equalityNV(CPSRreg);
+            return !equalityNV();
         case 12 : 
-            return (!checkZ(CPSRreg) && equalityNV(CPSRreg));
+            return (!checkZ() && equalityNV());
         case 13 : 
-            return (checkZ(CPSRreg) || !equalityNV(CPSRreg));
+            return (checkZ() || !equalityNV());
         default : 
             assert(cond == 14); 
             return 1;
@@ -287,16 +214,16 @@ Instruction checkCaseTwo(uint32_t instr) {
 /* This function checks the 30th bit of the CPSR register (the Z
    bit) to see if it is set. Returns 1 if Z is set. Returns 0 if
    it is clear. */ 
-int checkZ(uint32_t CPSRreg) {
-   return getBits(30, 30, CPSRreg);
+int checkZ(void) { 
+   return getBits(30, 30, *(regFile + CPSR));
 }
 
 /* This function checks the 31st bit of the CPSR register (the N
    bit) and compares it with the 28th bit (the V bit). Returns 1 of
    N = C. Returns 0 if N != C */
-int equalityNV(uint32_t CPSRreg) {
-    int N = getBits(31, 31, CPSRreg);
-    int V = getBits(28, 28, CPSRreg);
+int equalityNV(void) {
+    int N = getBits(31, 31, *(regFile + CPSR));
+    int V = getBits(28, 28, *(regFile + CPSR));
     return (N & V);
 }
 	    
@@ -325,7 +252,7 @@ int branch(uint32_t instr) {
 }
 
 // Multiplies the contents of two registers with the option to accumulate
-void mult(uint32_t *regFile, uint32_t instr) {
+void mult(uint32_t instr) {
     /* The bit value of the accumulate bit, which decides whether the
     instruction performs a multiply or multiply and accumulate */     
     uint32_t accBit = getBits(21, 21, instr); 
@@ -338,29 +265,25 @@ void mult(uint32_t *regFile, uint32_t instr) {
     uint32_t result;    
  
     if (accBit == 0) { 
-        result = multInstr(regFile, instr);  
+        result = multInstr(instr);  
     } else {
-        result = accMultInstr(regFile, instr); 
+        result = accMultInstr(instr); 
     } 
 
     if (setBit == 1) {
-
-        // The pointer to the CPSR register 
-        uint32_t *CPSRreg = regFile + CPSR;   
-       
         // The updated N and Z flag bit values        
         uint32_t N = getBits(31, 31, result);    
         uint32_t Z = (result == 0); 
         
-        setCPSRBit(CPSRreg, 31, N);       
-        setCPSRBit(CPSRreg, 30, Z);  
+        setCPSRBit(31, N);       
+        setCPSRBit(30, Z);  
     }  
 }
 
 
 /* Since the Accumulate bit is 0, then the multiply instruction is 
 carried out, and performs Rd:=RmxRs, where Rn is ignored */ 
-uint32_t multInstr(uint32_t *regFile, uint32_t instr) {
+uint32_t multInstr(uint32_t instr) {
     uint32_t destReg = getBits(19, 16, instr);  
     uint32_t regS = getBits(11, 8, instr); 
     uint32_t regM = getBits(3, 0, instr); 
@@ -371,7 +294,7 @@ uint32_t multInstr(uint32_t *regFile, uint32_t instr) {
 
 /* Since the Accumulate bit is 1, then the accumulate-multiply instruction is 
 carried out, and performs Rd:=RmxRs+Rn */ 
-uint32_t accMultInstr(uint32_t *regFile, uint32_t instr) {
+uint32_t accMultInstr(uint32_t instr) {
     uint32_t destReg = getBits(19, 16, instr); 
     uint32_t regN = getBits(15, 12, instr); 
     uint32_t regS = getBits(11, 8, instr); 
@@ -391,18 +314,18 @@ uint32_t createMask(uint32_t top, uint32_t bot) {
 }
 
 // Prints the state of the processor
-void printState(uint32_t *regFile, uint8_t *mainMem) { 
+void printState(void) { 
     int i; 
     for (i = 0; i < GEN_REG; i++) { 
         printf("%i\t:  %d (0x%08x)\n", i, regFile[i], regFile[i]);  
     }
     
-    printf("PC  :          %d (0x%08x)\n", regFile[15], regFile[15]);
-    printf("CPSR:          %d (0x%08x)\n", regFile[16], regFile[16]);
+    printf("PC  :          %d (0x%08x)\n", regFile[PC], regFile[PC]);
+    printf("CPSR:          %d (0x%08x)\n", regFile[CPSR], regFile[CPSR]);
     printf("Non-zero memory:\n");
-    for (i = 0; i < MAX_SIZE; i += 4) {
-        if (getInteger(mainMem, i) != 0) {
-            printf("0x%08x: 0x%08x\n", i, switchEndian(getInteger(mainMem, i)));
+    for (i = 0; i < MAX_SIZE; i += sizeof(int)) {
+        if (getInteger(i) != 0) {
+            printf("0x%08x: 0x%08x\n", i, switchEndian(getInteger(i)));
         }
     }
 }
@@ -444,7 +367,7 @@ uint32_t rotateRight(uint32_t amount, uint32_t value) {
 
 /* Given the operand determines the amount to be shifted, taking into account
     whether it is a constant amount or specified by a register */
-uint32_t getShiftAmount(uint32_t *regFile, uint32_t operand) {
+uint32_t getShiftAmount(uint32_t operand) {
     uint32_t shiftKind = getBits(4, 4, operand);
     uint32_t shiftAmount;
     if (shiftKind == 0) {
@@ -461,13 +384,13 @@ uint32_t getShiftAmount(uint32_t *regFile, uint32_t operand) {
 
 /* Given an operand, outputs the value after the shifted register operation
     is applied to the value in Rm (bits 0 to 3) */
-uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand) {
+uint32_t evaluateShiftedReg(uint32_t operand) {
     // Gets the value on which the shift operations will be applied (Rm)
     uint32_t valueReg = getBits(3, 0, operand);
     uint32_t shiftValue = regFile[valueReg];
     
     // Gets the amount to be shifted
-    uint32_t shiftAmount = getShiftAmount(regFile, operand);
+    uint32_t shiftAmount = getShiftAmount(operand);
 
     // Get the shift type
     uint32_t shiftType = getBits(6, 5, operand);
@@ -487,9 +410,7 @@ uint32_t evaluateShiftedReg(uint32_t *regFile, uint32_t operand) {
 
 /* Helper function for single data transfer that stores the data from the source
     register to the main memory */
-void storeData(uint8_t *mainMem, uint32_t *regFile, 
-    uint32_t source, uint32_t index)
-{
+void storeData(uint32_t source, uint32_t index) {
     if (index < MAX_SIZE) {
         uint32_t data = switchEndian(regFile[source]);
         mainMem[index] = getBits(31, 24, data);
@@ -503,11 +424,9 @@ void storeData(uint8_t *mainMem, uint32_t *regFile,
 
 /* Helper function for single data transfer that loads the data from the main
     memory into the dest register */
-void loadData(uint8_t *mainMem, uint32_t *regFile, 
-    uint32_t dest, uint32_t index)
-{
+void loadData(uint32_t dest, uint32_t index) {
     if (index < MAX_SIZE) {
-        uint32_t data = getInteger(mainMem, index);
+        uint32_t data = getInteger(index);
         regFile[dest] = data;
     } else {
         printf("Error: Out of bounds memory access at address 0x%08x\n", index);
@@ -516,14 +435,14 @@ void loadData(uint8_t *mainMem, uint32_t *regFile,
 
 /* This function is used to do single data transfers. The instuction determines
     whether it is a load or a store and the offset for the base register */
-void singleDataTransfer(uint8_t *mainMem, uint32_t *regFile, uint32_t instr) {
+void singleDataTransfer(uint32_t instr) {
     // Initialise the offset
     uint32_t offset = getBits(11, 0, instr);
     // Get the Immediate offset(I) bit
     uint32_t immBit = getBits(25, 25, instr);
     // If the Immediate offset flag is set, get the shited register value
     if (immBit != 0) {
-        offset = evaluateShiftedReg(regFile, offset);
+        offset = evaluateShiftedReg(offset);
     }
     
     // Get the up bit
@@ -553,9 +472,9 @@ void singleDataTransfer(uint8_t *mainMem, uint32_t *regFile, uint32_t instr) {
             index -= offset;
         }
         if (loadStoreBit == 0) {
-            storeData(mainMem, regFile, destReg, index);
+            storeData(destReg, index);
         } else {
-            loadData(mainMem, regFile, destReg, index);
+            loadData(destReg, index);
         }
     } else {
     // Post indexing
@@ -566,9 +485,9 @@ void singleDataTransfer(uint8_t *mainMem, uint32_t *regFile, uint32_t instr) {
             assert (offsetReg != baseReg);
         }
         if (loadStoreBit == 0) {
-            storeData(mainMem, regFile, destReg, index);
+            storeData(destReg, index);
         } else {
-            loadData(mainMem, regFile, destReg, index);
+            loadData(destReg, index);
         }
 
         // Check up bit
@@ -609,10 +528,7 @@ uint32_t evaluateImmediateValue(uint32_t operand) {
    then operand2 is an immediate value. If immediate operand is clear then
    operand2 is a register. Also sets flags depending on the S bit(bit 20)
    of the instruction. */
-void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
-    // create a pointer to the CPSR register.
-    uint32_t *CPSRreg = regFile + CPSR;
-    
+void dataProcessInstr(uint32_t instr) { 
     // get the 25th bit of the instruction (immediate operand bit)
     uint32_t immOp = getBits(25, 25, instr);
     
@@ -625,7 +541,7 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
         op2 = evaluateImmediateValue(op2Bits);
     } else {
     // else, the immediate operand bit is 0. op2 is a register
-        op2 = evaluateShiftedReg(regFile, op2Bits);
+        op2 = evaluateShiftedReg(op2Bits);
     }
   
     // get the opcode from the instruction, and regN from instruction
@@ -633,7 +549,7 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
     uint32_t regN = getBits(19, 16, instr);
 
     // result from applying opcode
-    uint32_t result = executeOpcode(regFile, opcode, regN, op2);
+    uint32_t result = executeOpcode(opcode, regN, op2);
     
     if (opcode < 8 || opcode > 10) {
         // the register to put result into
@@ -657,13 +573,13 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
             case 9  :
             case 12 :
             case 13 : 
-                carry = getCarryFromShifter(regFile, op2Bits); 
+                carry = getCarryFromShifter(op2Bits); 
                 break;
             case 2  :
             case 3  :
             case 4  :
             case 10 : 
-                carry = getCarryFromALU(regFile, instr, op2, CPSRreg);
+                carry = getCarryFromALU(instr, op2);
                 break;
             default : 
                 perror("The opcode entered was not valid, carry\
@@ -671,26 +587,24 @@ void dataProcessInstr(uint32_t *regFile, uint32_t instr) {
         }
         
         // set C flag (bit 29)
-        setCPSRBit(CPSRreg, 29, carry);    
+        setCPSRBit(29, carry);    
     
         if (result == 0) {
             // if result == 0, set Z flag (bit 30)
-            setCPSRBit(CPSRreg, 30, 1);
+            setCPSRBit(30, 1);
         } else {
             // if result != 0, clear Z flag (bit 30)
-            setCPSRBit(CPSRreg, 30, 0);
+            setCPSRBit(30, 0);
         }
 
         // set N flag (bit 31)
         int32_t bit31 = getBits(31, 31, result);
-        setCPSRBit(CPSRreg, 31, bit31);
+        setCPSRBit(31, bit31);
     }
 }
 
 // The carry is extracted from ALU operations
-uint32_t getCarryFromALU(uint32_t *regFile, uint32_t instr, uint32_t op2,
-                         uint32_t *CPSRreg) 
-{
+uint32_t getCarryFromALU(uint32_t instr, uint32_t op2) {
     uint32_t opcode = getBits(24, 21, instr);
     assert(opcode == 2 || opcode == 3 || opcode == 4 || opcode == 10);
 
@@ -727,9 +641,9 @@ uint32_t isOverflow(uint32_t int1, uint32_t int2) {
 } 
 
 // Gets carry from shifters when op2 is a register
-uint32_t getCarryFromShifter(uint32_t *regFile, uint32_t op2Bits) {
+uint32_t getCarryFromShifter(uint32_t op2Bits) {
     uint32_t shiftType = getBits(6, 5, op2Bits);
-    uint32_t shiftAmount = getShiftAmount(regFile, op2Bits);    
+    uint32_t shiftAmount = getShiftAmount(op2Bits);    
     uint32_t carry;
     uint32_t regM = getBits(3, 0, op2Bits);
 
@@ -752,9 +666,7 @@ uint32_t getCarryFromShifter(uint32_t *regFile, uint32_t op2Bits) {
 }
 
 // Decodes opcode and applies it to Rn and op2
-uint32_t executeOpcode(uint32_t *regFile, uint32_t opcode, uint32_t regN,
-                     uint32_t op2)
-{
+uint32_t executeOpcode(uint32_t opcode, uint32_t regN, uint32_t op2) {
     assert(opcode <= 13);
     
     switch(opcode) {
@@ -781,10 +693,13 @@ uint32_t executeOpcode(uint32_t *regFile, uint32_t opcode, uint32_t regN,
 
 /* This function is called to set the specified bit of CPSR register
    to the given value */
-void setCPSRBit(uint32_t *CPSRreg, uint32_t bit, uint32_t value) {
+void setCPSRBit(uint32_t bit, uint32_t value) {
     assert(bit <= 31 && bit >= 28);
     assert(value == 0 || value == 1);
    
+    // create a pointer to the CPSR register.
+    uint32_t *CPSRreg = regFile + CPSR;
+ 
     int32_t mask = createMask(bit, bit);
     
     if (value == 0) {
