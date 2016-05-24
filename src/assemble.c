@@ -52,6 +52,21 @@ struct mi {
     unsigned int rm   : 4;
 };
 
+struct ani {
+    unsigned int instr : 32;
+};
+
+struct lsli {
+    unsigned int cond    : 4;
+    unsigned int iden    : 2;
+    unsigned int i       : 1;
+    unsigned int opcode  : 4;
+    unsigned int s       : 1;
+    unsigned int rn      : 4;
+    unsigned int rd      : 4;
+    unsigned int operand : 12;
+};
+
 //grand design
 void writer(char *, FILE *);
 //parsing data processing instructions
@@ -71,6 +86,13 @@ void parseMi(char *, FILE *);
 void miToBin(struct mi *, FILE *);
 struct mi *miConvert(char *);
 int getVal(char *);
+//end
+
+//parsing special instructions
+void parseSi(char *, FILE *);
+void parselslI(char *, FILE *); 
+struct lsli *lsliConvert(char *);
+void lsliToBin(struct lsli *, FILE *);
 //end
 
 //API for hashtable
@@ -132,7 +154,7 @@ void writer(char *str, FILE *outFile) {
                 //TODO branch instruction
                 break;
             case 5:
-                //TODO Special instruction
+                parseSi(test, outFile); 
                 break;
             default:
                 //possible extension
@@ -149,7 +171,97 @@ void writer(char *str, FILE *outFile) {
     }
 }
 
+void parseSi(char *lineBuffer, FILE *outFile) {
+    switch(*lineBuffer) {
+        unsigned char *zeroes;
+        case 'a': 
+            zeroes = calloc(8, sizeof(unsigned char));
+            fwrite(zeroes, sizeof(unsigned char), sizeof(int), outFile);
+            free(zeroes);  
+            break;
+        case 'l': 
+            parselslI(lineBuffer, outFile);
+            break;
+        default:
+            fprintf(stderr, "unidentified command\n");
+            exit(1);
+            break;   
+    }
+}
 
+void parselslI(char *lineBuffer, FILE *outFile) { 
+    struct lsli *ins = (struct lsli*) malloc(sizeof(struct lsli));
+    isEnoughSpace(ins);
+
+    ins = lsliConvert(lineBuffer);
+    lsliToBin(ins, outFile);
+
+    free(ins);  
+}
+
+struct lsli *lsliConvert(char *str) {
+    char *test = str; 
+    char *opcode, *rd, *rn, *expr;
+    struct lsli *ins = (struct lsli*) malloc(sizeof(struct lsli));
+    isEnoughSpace(ins);
+
+    opcode = "mov";
+    strtok_r(test, " ", &test);
+    rd = strtok_r(test, ",", &test); 
+    ins->cond = (int) strtol("1101", NULL, 10); 
+    ins->iden = (int) strtol("00", NULL, 10);
+    ins->i = (int) strtol("0", NULL, 10);
+    ins->opcode = (int) strtol("1101", NULL, 10); 
+    ins->s = (int) strtol("0", NULL, 10);
+    ins->rn = (int) strtol("0", NULL, 10);
+    int s = (int) strtol(rd+1, NULL, 10);
+    ins-> rd = s;   
+  
+    expr = strtok_r(test, " ", &test);
+    
+    switch(*(expr + 2)) {
+        int exprNum; 
+        case 'x' : 
+            exprNum   = (int) strtol(expr + 1, NULL, 16);   
+            exprNum <<= 7;
+            exprNum  |= ins->rn;
+            ins->operand = exprNum; 
+            break;  
+        default  :
+            exprNum   = (int) strtol(expr + 1, NULL, 10);
+            exprNum <<= 7;
+            exprNum  |= ins->rn;
+            ins->operand = exprNum;
+            break;
+    }    
+    return ins;
+}
+
+void lsliToBin(struct lsli *ins, FILE *file) {
+    unsigned char *start;
+    start = (unsigned char*) calloc(4, sizeof(unsigned char));
+    isEnoughSpace(start);
+
+    *start |= ins -> cond << 4;
+    *start |= ins -> iden << 2;
+    *start |= ins -> i << 1; 
+    *start |= ins -> opcode >> 3;
+    
+    *(start+1) |= (ins->opcode << 1) << 4;
+    *(start+1) |= ins->s << 4;
+    *(start+1) |= ins->rn;
+      
+    *(start+2) |= ins->rd << 4;
+    *(start+2) |= ins->operand >> 8;
+
+    *(start+3) |= ins->operand; 
+
+    endianConvert(start);
+    fwrite(start, sizeof(unsigned char), 4, file);
+
+    free(start); 
+
+}
 
 void parseMi(char *lineBuffer, FILE *outFile) {
     struct mi *ins = (struct mi*) malloc(sizeof(struct mi));
