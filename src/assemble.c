@@ -288,6 +288,8 @@ struct dpi *dpiConvert(char *str) {
     ins->s = 0;
     ins->cond = 14;
 
+    removeChar(test, ' ');
+
     switch (opc) {
         case 13: //mov ->  mov Rd, <Operand2>
             ins->rn = 0;
@@ -300,7 +302,7 @@ struct dpi *dpiConvert(char *str) {
         case 8: //tst
             ins->rd = 0;
             rn = strtok_r(test, ",", &test);
-            op2 = strtok_r(test, " ", &test);
+            op2 = strtok_r(test, ",", &test);
             setIflagAndOper(ins, op2);
             setRn(ins, rn);
             break;
@@ -308,7 +310,7 @@ struct dpi *dpiConvert(char *str) {
             ins->rd = 0;
             ins->s  = 1;
             rn = strtok_r(test, ",", &test);
-            op2 = strtok_r(test, " ", &test);
+            op2 = strtok_r(test, ",", &test);
             setIflagAndOper(ins, op2);
             setRn(ins, rn);
             break;
@@ -316,7 +318,7 @@ struct dpi *dpiConvert(char *str) {
             ins->rd = 0;
             ins->s  = 1;
             rn = strtok_r(test, ",", &test);
-            op2 = strtok_r(test, " ", &test);
+            op2 = strtok_r(test, ",", &test);
             setIflagAndOper(ins, op2);
             setRn(ins, rn);
             break;
