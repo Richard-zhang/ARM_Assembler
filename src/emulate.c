@@ -15,6 +15,10 @@ struct state {
     uint32_t fetched; 
 };
 
+typedef enum instructionType {
+    DP = 0, MUL = 1, SDT = 2, BR = 3
+} Instruction;
+
 // Functions used to check condition 
 int checkCond(uint32_t cond, uint32_t CPSRpntr);
 int checkZ(uint32_t CPSRpntr);
@@ -29,9 +33,9 @@ uint32_t multInstr(uint32_t *regFile, uint32_t instr);
 uint32_t accMultInstr(uint32_t *regFile, uint32_t instr);
 
 // Main utility functions
-int checkInstruction(uint32_t instr);
-int checkCaseOne(uint32_t instr);
-int checkCaseTwo(uint32_t instr);
+Instruction checkInstruction(uint32_t instr);
+Instruction checkCaseOne(uint32_t instr);
+Instruction checkCaseTwo(uint32_t instr);
 void printState(uint32_t *regFile, uint8_t *mainMem);
 void simulatePipeline(uint8_t *mainMem, uint32_t *regFile, 
     struct state *ARMState);
@@ -148,23 +152,23 @@ void simulatePipeline(uint8_t *mainMem, uint32_t *regFile,
            the instruction will be executed or not */ 
         condReg = getBits(31, 28, ARMState->decoded);  
         if (checkCond(condReg, *(regFile + CPSR)) == 1){
-            int instrType = checkInstruction(ARMState->decoded);
-            switch(instrType) {
+            Instruction type = checkInstruction(ARMState->decoded);
+            switch(type) {
                 // DATA PROCESSING
-                case 0  :
+                case DP  :
                     dataProcessInstr(regFile, ARMState->decoded);  
                     break;
                 // MULTIPLY 
-                case 1  : 
+                case MUL  : 
                     mult(regFile, ARMState->decoded); 
                     break;  
                 // SINGLE DATA TRANSFER
-                case 2  : 
+                case SDT  : 
                     singleDataTransfer(mainMem, regFile, ARMState->decoded); 
                     break;  
                 // BRANCH    
                 default :
-                    assert(instrType == 3); 
+                    assert(type == BR); 
                     int offset = branch(ARMState->decoded); 
                     regFile[PC] += offset;   
                     
@@ -220,13 +224,13 @@ uint32_t getInteger(uint8_t *mainMem, uint32_t firstByteAddr) {
 
 /*Determines the type of the instruction. Returns 0 if Data Processing, 
 1 if multiply, 2 if Single Data Transfer, and 3 if Branch. */ 
-int checkInstruction(uint32_t instr) {  
+Instruction checkInstruction(uint32_t instr) {  
     // If bit 27 is set then the type is Branch    
     if (getBits(27, 27, instr) == 1) {
-        return 3;
+        return BR;
     // If bit 26 is set then the type is Single Data Transfer
     } else if (getBits(26, 26, instr) == 1) {
-        return 2;
+        return SDT;
     } else {
         return checkCaseOne(instr);    
     }
@@ -258,12 +262,12 @@ int checkCond(uint32_t cond, uint32_t CPSRreg) {
 
 /* Determines whether the instruction is a Data Processing or Multiply
 instruction by checking specific bits */ 
-int checkCaseOne(uint32_t instr) {
+Instruction checkCaseOne(uint32_t instr) {
     if (getBits(25, 25, instr) == 1) { 
-        return 0;
+        return DP;
     } else {
         if (getBits(4, 4, instr) == 0) { 
-            return 0;
+            return DP;
         } else {
             return checkCaseTwo(instr);    
         } 
@@ -272,11 +276,11 @@ int checkCaseOne(uint32_t instr) {
 
 /* Determines whether the instruction is a Data Processing or Multiply
 instruction by checking specific bits */ 
-int checkCaseTwo(uint32_t instr) { 
+Instruction checkCaseTwo(uint32_t instr) { 
     if (getBits(7, 7, instr) == 0) { 
-        return 0;
+        return DP;
     } else {
-        return 1; 
+        return MUL; 
     }
 }
 
