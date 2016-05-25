@@ -396,8 +396,7 @@ struct dpi *dpiConvert(char *str) {
         default:
             rd = strtok_r(test, ",", &test);
             rn = strtok_r(test, ",", &test);
-            op2 = strtok_r(test, ",", &test);
-            setIflagAndOper(ins, op2);
+            setIflagAndOper(ins, test);
             setRn(ins, rn);
             setRd(ins, rd);
             break;
@@ -423,26 +422,55 @@ void setRn(struct dpi *ins, char *str) {
     ins-> rn = s;
 }
 
+int getImmOp(int ope2) {
+    unsigned int lsBitIndex = 0;
+    unsigned int op2 = ope2;
+    while ((op2 & 1) != 1) {
+        op2 >>= 1;
+        lsBitIndex++;
+    }
+    if (lsBitIndex % 2 != 0) {
+        lsBitIndex--;
+    }
+
+    unsigned int rotationAmount = (32 - lsBitIndex) >> 1;
+    rotationAmount <<= 8;
+    unsigned int immValue 
+                      = getBits(lsBitIndex + 7, lsBitIndex, ope2);
+    ope2 = rotationAmount | immValue;
+    return ope2;
+}
+
 void setIflagAndOper(struct dpi *ins, char *str) {
     int ope2;
     switch (str[0]) {
         case '#':
             ins->i = 1;
-            if((str+2) != NULL) {
-                if(*(str+2) == 'x') {
-                    ope2 = (int) strtol(str+1, (char **) NULL, 16);
-                    ins->operand  = ope2;
-                    break;
-                    printf("you will never see this printing\n");
-                }
+
+            if(*(str+2) == 'x') {
+                ope2 = (int) strtol(str+1, (char **) NULL, 16);
+            } else {
+                ope2 = (int) strtol(str+1, (char **) NULL, 10);          
             }
 
-            ope2 = (int) strtol(str+1, (char **) NULL, 10);
+            if (ope2 > 255) {
+                ope2 = getImmOp(ope2);
+            }
             ins->operand = ope2;
             break;
         case 'r':
             ins->i = 0;
-            ope2 = (int) strtol(str+1, (char **) NULL, 10);
+            char *reg;
+            reg = strtok_r(str, ",", &str);
+            ope2 = getVal(reg); 
+           
+            int shift;
+            if (*str != '\0') {
+                shift = evaluateShiftedReg(str);
+                shift <<= 4;
+                ope2 |= shift;
+            }
+
             ins->operand = ope2;
             break;
         default:
@@ -450,6 +478,80 @@ void setIflagAndOper(struct dpi *ins, char *str) {
             exit(1);
     }
 }
+
+int checkLShift(char *type) {
+    switch (*(type + 2)) {
+        case 'l':
+            // lsl: Set bits 6,5 to 00 (0)
+            return 0;
+        case 'r':
+            // lsr: Set bits 6,5 to 01(1)
+            return 1;
+        default:
+            perror("checkLShift function argument invalid");
+            break;
+        }
+}
+
+int checkShiftKind(char *kind) {
+    int num;
+    switch (*kind) {
+       case 'r':
+            // It is a register
+            // Set bit 4 = 1
+            // Set bit 7 = 0
+            // Set bits 11,8 to reg number
+            num = getVal(kind);
+            num <<= 4;
+            num |= 1;
+            return num;
+        case '#':
+            // It is an integer
+            // Set bit 4 = 0
+            // Set bits 11,7 to the value
+            num  = (int) strtol(kind + 1, (char **) NULL, 10);
+            num <<= 3;
+            return num;
+        default:
+            perror("checkShiftKind function argument invalid");
+        }
+}
+
+int checkShiftType(char *type) {
+    switch (*type) {
+        case 'l':
+            // It is a logical shift
+            return checkLShift(type);
+        case 'a':
+            // It is arithmetic right shift
+            // set bits 6,5: 10(2)
+            return 2;
+        case 'r':
+            // It is a right rotation
+            // Set bits 6,5 to 11(3)
+            return 3;
+        default:
+            perror("checkShiftType function argument invalid");
+        }
+}
+
+int evaluateShiftedReg(char *string) {
+    char shiftType[4];
+    strncpy(shiftType, string, 3);
+    
+    int type = checkShiftType(shiftType);
+    
+    string += 3;
+    int kind = checkShiftKind(string);
+    
+    // Shifting type to include it with the kind
+    type <<= 1;
+    int result;
+    result = kind | type;
+
+    return result;
+}
+
 
 void dpiToBin(struct dpi *ins, FILE *file) {
     unsigned char *start;
@@ -521,7 +623,7 @@ void helpParseRnRmU(struct sdti *ins, char *express) {
             break;
         case 'r':
             ins->i = 1;
-            //do later for shriting
+            //do later for shifting
             ins->u = 1;
             ins->offs = getVal(test);
 
@@ -532,29 +634,32 @@ void helpParseRnRmU(struct sdti *ins, char *express) {
     }
 }
 
-void parseRnRmU(struct sdti *ins, char *rn, char *express) {
+void parseRnRmU(struct sdti *ins, char *rn, char *express, char *test) {
 
     ins->rn = getVal(rn+1);
     if (express == NULL) {
-        ins->p = 1;
-        ins->u = 1;
-        ins->offs = 0;
-        ins->i = 0;
-        return;
+        if (*test == '\0') {
+            ins->p = 1;
+            ins->u = 1;
+            ins->offs = 0;
+            ins->i = 0;
+            return;
+        }
     }
 
     switch(isSquare(rn)) {
         case 1:
             ins->p = 0;
+            helpParseRnRmU(ins, test);
             break;
         case 0:
             ins->p = 1;
+            helpParseRnRmU(ins, express);
             break;
         default:
             fprintf(stderr, "problem\n");
             exit(1);
     }
-    helpParseRnRmU(ins, express);
 }
 
 void sdtiToBin(struct sdti *ins, FILE *file) {
@@ -638,7 +743,7 @@ struct sdti *sdtiConvert(char *str) {
                     ldrExpress(ins, rnOrExp, rd);
                     break;
                 case '[':
-                    parseRnRmU(ins, rnOrExp, express);
+                    parseRnRmU(ins, rnOrExp, express, test);
                     break;
                 default:
                     fprintf(stderr, "not a valid rn");
@@ -647,7 +752,7 @@ struct sdti *sdtiConvert(char *str) {
             break;
         case 's':
             ins->l = 0;
-            parseRnRmU(ins, rnOrExp, express);
+            parseRnRmU(ins, rnOrExp, express, test);
             break;
         default:
             fprintf(stderr, "it's not a sdti ins\n");
@@ -845,4 +950,26 @@ void forwardRefrence(){
 void overWriteFile(FILE *file, int pos, int  *num) {
     fseek(file, (pos - 1) * 4, SEEK_SET);
     fwrite(num, 3, 1, file);
+}
+
+int getBits(int leftmost, int rightmost, int num) {
+    if (leftmost < rightmost) {
+        perror("The arguments to getBits function are invalid");
+    }
+
+    int mask = createMask(leftmost, rightmost);  
+    num &= mask;
+    num >>= rightmost;
+    return num;   
+}
+
+int createMask(int top, int bot) {
+    if (top < bot) {
+        perror("The arguments to createMask function are invalid");
+    }
+
+    int difference = top - bot;
+    int mask = (1 << (difference + 1)) - 1;
+    mask <<= bot;
+    return mask;
 }

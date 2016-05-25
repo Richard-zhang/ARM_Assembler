@@ -123,6 +123,11 @@ void dpiToBin(struct dpi *, FILE *);
 struct dpi *dpiConvert(char *);
 int  getOpVal(char *);
 void setIflagAndOper(struct dpi *, char *);
+int checkLShift(char *type);
+int checkShiftKind(char *kind);
+int checkShiftType(char *type);
+int evaluateShiftedReg(char *string);
+int getImmOp(int ope2);
 void setRd(struct dpi *, char *);
 void setRn(struct dpi *, char *);
 //end
@@ -151,10 +156,11 @@ void parseSdti(char *, FILE *);
 void removeChar(char *, char);
 int isSquare(char *);
 void helpParseRnRmU(struct sdti *, char *);
-void parseRnRmU(struct sdti *, char *, char *);
+void parseRnRmU(struct sdti *, char *, char *, char *);
 void sdtiToBin(struct sdti *, FILE *);
 void ldrExpress(struct sdti *, char *, char *);
 char *combine(char *, char *);
+//end
 
 //API for hashtable
 unsigned int hash(char *);
@@ -172,3 +178,5 @@ void endianConvert(unsigned char *);
 void swap(unsigned char *, unsigned char *);
 void overWriteFile(FILE *, int , int *);
 void forwardRefrence();
+int getBits(int leftmost, int rightmost, int num);
+int createMask(int top, int bot);
