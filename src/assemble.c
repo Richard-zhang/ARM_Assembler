@@ -1,15 +1,12 @@
 #include "assemble.h"
-FILE *outFile;
-int IsError = 0;
 
 int main(int argc, char **argv) {
     //create a symbol table
     setup();
 
     FILE *inFile;
-    //FILE *outFile;
     inFile    = fopen(argv[1], "r");
-    outFile   = fopen(argv[2], "wb");
+    outFile   = fopen(argv[2], "wb+");
     char lineBuffer[MAX_LINE];
 
     if (inFile == NULL) {
@@ -22,6 +19,10 @@ int main(int argc, char **argv) {
         }
     }
 
+    free(hashMap);
+
+    forwardRefrence();
+
     fclose(outFile);
     fclose(inFile);
 
@@ -30,6 +31,7 @@ int main(int argc, char **argv) {
 
 void writer(char *str, FILE *outFile) {
     if( strchr(str, ':') == NULL) {
+        ++PC;
         char *test = str;
         char *copy = strdup(test);
         Ins type = typeId(strtok_r(copy, " ", &copy));
@@ -45,7 +47,7 @@ void writer(char *str, FILE *outFile) {
                 parseSdti(test, outFile);
                 break;
             case 4:
-                //TODO branch instruction
+                parseBi(test, outFile);
                 break;
             case 5:
                 parseSi(test, outFile);
@@ -60,8 +62,112 @@ void writer(char *str, FILE *outFile) {
         }
 
     } else {
-        //TODO deal with label
+        char *test = str;
+        removeChar(test, ':');
+        char *defn = (char *) malloc(sizeof(char));
+        sprintf(defn, "%d", PC+1);
+
+        put(test, defn);
     }
+}
+
+int getBinaryVal(char *opcode) {
+    char *str = lookup(opcode)->defn;
+    int q = (int) strtol(str, (char **) NULL, 2);
+
+    return q;
+}
+
+void biToBin(struct bi *ins, FILE *file) {
+    unsigned char *start;
+    start = (unsigned char *) calloc(4, sizeof(unsigned char));
+
+    *start |= (ins->cond) << 4;
+    *start |= (ins->id);
+
+    *(start+1) |= (ins->offset) >> 16;
+
+    *(start+2) |= (ins->offset) >> 8;
+
+    *(start+3) |= (ins->offset);
+
+    endianConvert(start);
+    fwrite(start, sizeof(unsigned char), 4, file);
+    free(start);
+}
+
+struct bi *biConvert(char *str) {
+    char *test = str;
+    struct bi *ins = (struct bi*) malloc (sizeof(struct bi));
+
+    char *opcode, *express;
+
+    opcode = strtok_r(test, " ", &test);
+
+    int opc = getOpVal(opcode);
+    ins->cond = opc;
+    ins->id = 10;
+    express = test;
+    switch(isLabelOrAddress(express)) {
+        case 1:
+            calOffset(ins, express);
+            break;
+        case 0: //address
+            printf("haven't implmented\n");
+            //convert address to two's complementary
+            break;
+        default:
+            fprintf(stderr, "not invalid address field\n");
+            exit(1);
+    }
+
+    return ins;
+}
+
+int isLabelOrAddress(char *str) {
+    return 1;
+}
+
+void calOffset(struct bi *ins, char *label) {
+    struct entry *query = (struct entry *) malloc(sizeof(struct entry));
+    if(lookup(label) != NULL) {
+        //backward reference
+        query = lookup(label);
+        char *str = query->defn;
+        int lineNumber = (int) strtol(str, (char **) NULL, 10);
+
+        int negative = lineNumber - (PC + 2);
+
+        if(negative >= 0) {
+            fprintf(stderr, "not a backward reference");
+        }
+        //TODO the negative value is extremely big execeed the field of 24bits
+        ins->offset = negative;
+    } else {
+        ins->offset = 0;
+        struct Fr *fr = (struct Fr *) malloc(sizeof(struct Fr));
+        //TODO garbage collection
+        char *src = (char *) malloc(sizeof(char));
+        strcpy(src, label); //really buggy god gives me intuition
+        fr->location = PC;
+        fr->label = src;
+
+        lst[numfr] = fr;
+        ++numfr;
+    }
+
+    free(query);
+
+}
+
+void parseBi(char *lineBuffer, FILE *outFile) {
+    struct bi *ins = (struct bi*) malloc(sizeof(struct bi));
+    isEnoughSpace(ins);
+
+    ins = biConvert(lineBuffer);
+    biToBin(ins, outFile);
+
+    free(ins);
 }
 
 void parseSi(char *lineBuffer, FILE *outFile) {
@@ -121,8 +227,6 @@ struct lsli *lsliConvert(char *str) {
 
     return ins;
 }
-
-
 
 void lsliToBin(struct lsli *ins, FILE *file) {
     unsigned char *start;
@@ -231,8 +335,6 @@ void miToBin(struct mi *ins, FILE *file) {
     free(start);
 }
 
-
-
 void parseDpi(char *lineBuffer, FILE *outFile) {
     struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
     isEnoughSpace(ins);
@@ -269,6 +371,7 @@ struct dpi *dpiConvert(char *str) {
             break;
         case 8: //tst
             ins->rd = 0;
+            ins->s = 1;
             rn = strtok_r(test, ",", &test);
             op2 = strtok_r(test, ",", &test);
             setIflagAndOper(ins, op2);
@@ -454,7 +557,6 @@ void parseRnRmU(struct sdti *ins, char *rn, char *express) {
     helpParseRnRmU(ins, express);
 }
 
-
 void sdtiToBin(struct sdti *ins, FILE *file) {
     unsigned char *start;
     start = (unsigned char *) calloc(4, sizeof(unsigned char));
@@ -503,8 +605,10 @@ void ldrExpress(struct sdti *ins, char *str, char *rn) {
         free(lineBuffer);
         IsError = 1;
     } else {
-        printf("pc");
-        exit(1);
+        ins->i = 0;
+        ins->p = 1;
+        ins->rn = 15;
+
     }
 }
 
@@ -620,7 +724,6 @@ struct elem *install(char *name, Ins defn) {
     return np;
 }
 
-
 struct entry *lookup(char *s) {
     struct entry *np;
     for (np = hashTable[hash(s)]; np != NULL; np = np->next) {
@@ -657,6 +760,8 @@ struct entry *put(char *name, char *defn) {
 }
 
 void setup() {
+    hashMap = (struct elem **) calloc(NUM_INS, sizeof(struct elem *));
+
     put("and", "0000");
     put("eor", "0001");
     put("sub", "0010");
@@ -690,6 +795,17 @@ void setup() {
     install("bgt",BGT);
     install("lsl",LSL);
     install("andeq",ANDEQ);
+
+    //condition code
+
+    put("beq", "0000");
+    put("bne", "0001");
+    put("bge", "1010");
+    put("blt", "1011");
+    put("bgt", "1100");
+    put("ble", "1101");
+    put("b", "1110");
+
 }
 
 void isEnoughSpace(void *ip) {
@@ -712,4 +828,21 @@ void swap(unsigned char *first, unsigned char *end) {
 
 Ins typeId(char *str) {
     return find(str)->defn;
+}
+
+void forwardRefrence(){
+    if(numfr) {
+        int i;
+        for (i = 0; i < numfr; i++) {
+            int pcofbranch = lst[i]->location;
+            int addr = (int) strtol(lookup(lst[i]->label)->defn, NULL, 10);
+            int offset = addr - (pcofbranch + 2);
+            overWriteFile(outFile, pcofbranch, &offset);
+        }
+    }
+}
+
+void overWriteFile(FILE *file, int pos, int  *num) {
+    fseek(file, (pos - 1) * 4, SEEK_SET);
+    fwrite(num, 3, 1, file);
 }

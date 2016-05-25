@@ -4,6 +4,20 @@
 #define MAX_LINE  32
 #define HASH_SIZE 101
 #define NUM_INS   101
+#define MAXX 25
+
+FILE *outFile;
+int IsError = 0;
+int PC = 0;
+int numfr = 0;
+
+struct Fr {
+    int location;
+    char *label;
+};
+
+struct Fr *lst[MAXX];
+
 
 typedef enum {
     ADD=1,SUB=1,RSB=1,AND=1,EOR=1,ORR=1,MOV=1,TST=1,TEQ=1,CMP=1,
@@ -17,7 +31,7 @@ struct elem {
     Ins defn;
 };
 
-static struct elem *hashMap[NUM_INS];
+struct elem **hashMap;
 //create hash table and entry for hashtable
 static struct entry *hashTable[HASH_SIZE];
 
@@ -80,8 +94,28 @@ struct sdti {
     unsigned int offs : 12;
 };
 
+struct bi {
+    unsigned int cond: 4;
+    unsigned int id: 4;
+    unsigned int offset: 24;
+};
+
 //grand design
 void writer(char *, FILE *);
+
+
+
+//parsing branch instructions
+void parseBi(char *, FILE *);
+
+struct bi *biConvert(char *str);
+void calOffset(struct bi *, char *);
+int getBinaryVal(char *);
+void biToBin(struct bi *ins, FILE *);
+int isLabelOrAddress(char *);
+void calOffset(struct bi *, char *);
+
+
 //parsing data processing instructions
 void parseDpi(char *, FILE *);
 
@@ -119,8 +153,8 @@ int isSquare(char *);
 void helpParseRnRmU(struct sdti *, char *);
 void parseRnRmU(struct sdti *, char *, char *);
 void sdtiToBin(struct sdti *, FILE *);
-void ldrExpress(struct sdti *, char *);
-
+void ldrExpress(struct sdti *, char *, char *);
+char *combine(char *, char *);
 
 //API for hashtable
 unsigned int hash(char *);
@@ -136,3 +170,5 @@ Ins typeId(char *);
 void isEnoughSpace(void *);
 void endianConvert(unsigned char *);
 void swap(unsigned char *, unsigned char *);
+void overWriteFile(FILE *, int , int *);
+void forwardRefrence();
