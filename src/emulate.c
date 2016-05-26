@@ -493,6 +493,7 @@ uint32_t getShiftAmount(uint32_t operand) {
     uint32_t shiftAmount;
     if (shiftKind == 0) {
         // Initialise shiftAmount as the constant
+        // SHFT_REG_CONST_MS_BIT = 11; SHFT_REG_CONST_LS_BIT = 7
         shiftAmount = getBits(SHFT_REG_CONST_MS_BIT, 
                                         SHFT_REG_CONST_LS_BIT, operand);
     } else {
@@ -527,13 +528,15 @@ void loadData(uint32_t dest, uint32_t index) {
 
 uint32_t branch(uint32_t instr) {
     // extracts offset from the instruction
+    // BR_MS_OFFSET_BIT = 23
     int32_t offset = getBits(BR_MS_OFFSET_BIT, 0, instr);
     
     /* offset is shifted left 2 bits to account for the PC being 8 bytes
        ahead of the instruction that is being executed */  
     int shift = 2;
     offset <<= shift;
-    
+
+    // BR_LS_OPCODE_BIT = 25
     uint32_t mostSigBit 
                     = getBits(BR_LS_OPCODE_BIT, BR_LS_OPCODE_BIT, offset);
 
