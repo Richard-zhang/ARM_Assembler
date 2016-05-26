@@ -130,6 +130,10 @@ void singleDataTransfer(uint32_t instr);
     whether it is a constant amount or specified by a register */
 uint32_t getShiftAmount(uint32_t operand);
 
+/* Given the corresponding bit, it determines whether the function should load
+    data from memory or store data into the memory give the dest/src reg */
+void loadOrStore(uint32_t loadStoreBit, uint32_t reg, uint32_t index);
+
 /* Helper function for single data transfer that stores the data from the source
     register to the main memory */
 void storeData(uint32_t source, uint32_t index);

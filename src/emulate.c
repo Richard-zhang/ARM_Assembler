@@ -458,11 +458,9 @@ void singleDataTransfer(uint32_t instr) {
             // Offset is subtracted from index
             index -= offset;
         }
-        if (loadStoreBit == 0) {
-            storeData(destReg, index);
-        } else {
-            loadData(destReg, index);
-        }
+        
+        loadOrStore(loadStoreBit, destReg, index);
+
     } else {
     // Post indexing
         // In a post-indexing have to check that Rm and Rn are not the same
@@ -471,11 +469,8 @@ void singleDataTransfer(uint32_t instr) {
             uint32_t offsetReg = getBits(3, 0, instr);
             assert (offsetReg != baseReg);
         }
-        if (loadStoreBit == 0) {
-            storeData(destReg, index);
-        } else {
-            loadData(destReg, index);
-        }
+
+        loadOrStore(loadStoreBit, destReg, index);
 
         // Check up bit
         if (upBit != 0) {
@@ -504,6 +499,14 @@ uint32_t getShiftAmount(uint32_t operand) {
         shiftAmount = getBits(7, LS_BIT, shiftRegValue);
     }
     return shiftAmount;
+}
+
+void loadOrStore(uint32_t loadStoreBit, uint32_t reg, uint32_t index) {
+    if (loadStoreBit == 0) {
+        storeData(reg, index);
+    } else {
+        loadData(reg, index);
+    }
 }
 
 void storeData(uint32_t source, uint32_t index) {
