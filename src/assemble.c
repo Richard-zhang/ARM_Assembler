@@ -1,4 +1,13 @@
 #include "assemble.h"
+int numLdr = 0;
+
+struct ldr {
+    struct sdti *ins;
+    int content;
+    int pc;
+};
+
+struct ldr *list[MAXX];
 
 int main(int argc, char **argv) {
     //create a symbol table
@@ -23,11 +32,44 @@ int main(int argc, char **argv) {
 
     forwardRefrence();
 
+    if(numLdr) {
+        int i;
+        for(i = 0; i < numLdr; ++i) {
+            fwrite(&(list[i]->content), sizeof(int),1, outFile);
+            ++PC;
+            int pc = list[i]->pc;
+            int offset = (PC - (pc + 2)) * 4;
+            list[i]->ins->offs = offset;
+
+            printf("struct is \n");
+            helpPrint(list[i]->ins);
+            fseek(outFile, (pc-1)*4, SEEK_SET);
+            sdtiToBin(list[i]->ins, outFile);
+            fseek(outFile, 0, SEEK_END);
+
+        }
+    }
+
     fclose(outFile);
     fclose(inFile);
 
     return 0;
 }
+
+
+void helpPrint(struct sdti *ins) {
+    printf("cond is %d\n", ins->cond);
+    printf("id is %d\n", ins->id);
+    printf("i is %d\n", ins->i);
+    printf("p is %d\n", ins->p);
+    printf("u is %d\n", ins->u);
+    printf("id2 is %d\n", ins->id2);
+    printf("l is %d\n", ins->l);
+    printf("rn is %d\n", ins->rn);
+    printf("rd is %d\n", ins->rd);
+    printf("offs is %d\n", ins->offs);
+}
+
 
 void writer(char *str, FILE *outFile) {
     if( strchr(str, ':') == NULL) {
@@ -141,7 +183,6 @@ void calOffset(struct bi *ins, char *label) {
         if(negative >= 0) {
             fprintf(stderr, "not a backward reference");
         }
-        //TODO the negative value is extremely big execeed the field of 24bits
         ins->offset = negative;
     } else {
         ins->offset = 0;
@@ -451,7 +492,7 @@ int getImmOp(int ope2) {
 
     unsigned int rotationAmount = (32 - lsBitIndex) >> 1;
     rotationAmount <<= 8;
-    unsigned int immValue 
+    unsigned int immValue
                       = getBits(lsBitIndex + 7, lsBitIndex, ope2);
     ope2 = rotationAmount | immValue;
     return ope2;
@@ -466,7 +507,7 @@ void setIflagAndOper(struct dpi *ins, char *str) {
             if(*(str+2) == 'x') {
                 ope2 = (int) strtol(str+1, (char **) NULL, 16);
             } else {
-                ope2 = (int) strtol(str+1, (char **) NULL, 10);          
+                ope2 = (int) strtol(str+1, (char **) NULL, 10);
             }
 
             if (ope2 > 255) {
@@ -546,12 +587,12 @@ int checkShiftType(char *type) {
 int evaluateShiftedReg(char *string) {
     char shiftType[4];
     strncpy(shiftType, string, 3);
-    
+
     int type = checkShiftType(shiftType);
-    
+
     string += 3;
     int kind = checkShiftKind(string);
-    
+
     // Shifting type to include it with the kind
     type <<= 1;
     int result;
@@ -719,7 +760,18 @@ void ldrExpress(struct sdti *ins, char *str, char *rn) {
         ins->i = 0;
         ins->p = 1;
         ins->rn = 15;
+        ins->u = 1;
+        ins->offs = 0;
+        struct sdti *dst = (struct sdti *) malloc(sizeof(struct sdti));
+        memcpy(dst, ins, 4);
+        struct ldr *info = (struct ldr *) malloc(sizeof(struct ldr));
+        info->content = value;
+        info->pc = PC;
+        info->ins = dst;
+        list[numLdr] = info;
+        numLdr++;
 
+        //helpPrint(ins);
     }
 }
 
@@ -962,10 +1014,10 @@ int getBits(int leftmost, int rightmost, int num) {
         perror("The arguments to getBits function are invalid");
     }
 
-    int mask = createMask(leftmost, rightmost);  
+    int mask = createMask(leftmost, rightmost);
     num &= mask;
     num >>= rightmost;
-    return num;   
+    return num;
 }
 
 int createMask(int top, int bot) {
