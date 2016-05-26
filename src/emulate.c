@@ -85,13 +85,14 @@ Instruction checkCaseTwo(uint32_t instr) {
 }
 
 void printState(void) { 
-    int i; 
+    int i;
+    printf("Registers:\n");  
     for (i = 0; i < GEN_REG; i++) { 
-        printf("%i\t:  %d (0x%08x)\n", i, regFile[i], regFile[i]);  
+        printf("$%-3i: %10d (0x%08x)\n", i, regFile[i], regFile[i]);  
     }
     
-    printf("PC  :          %d (0x%08x)\n", regFile[PC], regFile[PC]);
-    printf("CPSR:          %d (0x%08x)\n", regFile[CPSR], regFile[CPSR]);
+    printf("PC  : %10d (0x%08x)\n", regFile[PC], regFile[PC]);
+    printf("CPSR: %10d (0x%08x)\n", regFile[CPSR], regFile[CPSR]);
     printf("Non-zero memory:\n");
     for (i = 0; i < MAX_SIZE; i += sizeof(int)) {
         if (getInteger(i) != 0) {
@@ -498,7 +499,7 @@ uint32_t getShiftAmount(uint32_t operand) {
                                         SHFT_REG_CONST_LS_BIT, operand);
     } else {
         // Change shiftAmount to the last byte in the shift Reg
-        uint32_t shiftReg = getBits(SHFT_REG_CONST_LS_BIT, 8, operand);
+        uint32_t shiftReg = getBits(SHFT_REG_CONST_MS_BIT, 8, operand);
         uint32_t shiftRegValue = regFile[shiftReg];
         shiftAmount = getBits(7, LS_BIT, shiftRegValue);
     }
