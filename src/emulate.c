@@ -1,7 +1,13 @@
 #include "emulate.h"
 
+// Created a global pointer to access main memory and reg file
+static uint8_t *mainMem = NULL;
+static uint32_t *regFile = NULL;
+
 int main(int argc, char **argv) {
-    assert(argc == 2); 
+    if (argc != 2) {
+        perror("The main function should only take 2 arguments");
+    } 
 
     struct state *ARMState = NULL;
     // Allocates space for the main memory and checks for error 
@@ -144,7 +150,10 @@ void simulatePipeline(struct state *ARMState) {
                     break;  
                 // BRANCH    
                 default :
-                    assert(type == BR); 
+                    if (type != BR) {
+                        perror("The type of instruction is not valid");
+                    }
+
                     int offset = branch(ARMState->decoded); 
                     regFile[PC] += offset;   
                     
@@ -273,7 +282,9 @@ uint32_t evaluateShiftedReg(uint32_t operand) {
         case 2 : 
             return arithmeticRightShift(shiftAmount, shiftValue);
         default: 
-            assert(shiftType == 3);
+            if (shiftType != 3) {
+                perror("Shift type in evaluateShiftedReg not valid");
+            }
             return rotateRight(shiftAmount, shiftValue);
     }
 }
@@ -296,9 +307,7 @@ uint32_t evaluateImmediateValue(uint32_t operand) {
     return immValue;
 }
 
-uint32_t executeOpcode(uint32_t opcode, uint32_t regN, uint32_t op2) {
-    assert(opcode <= 13);
-    
+uint32_t executeOpcode(uint32_t opcode, uint32_t regN, uint32_t op2) {   
     switch(opcode) {
         case 0  : 
         case 8  : 
@@ -316,7 +325,9 @@ uint32_t executeOpcode(uint32_t opcode, uint32_t regN, uint32_t op2) {
         case 12 : 
             return regFile[regN] | op2;
         default : 
-            assert(opcode == 13);
+            if (opcode != 13) {
+                perror("invalid opcode entered into executeOpCode");
+            }
             return op2;
     } 
 }
@@ -345,7 +356,9 @@ uint32_t getCarryFromShifter(uint32_t op2Bits) {
 
 uint32_t getCarryFromALU(uint32_t instr, uint32_t op2) {
     uint32_t opcode = getBits(24, 21, instr);
-    assert(opcode == 2 || opcode == 3 || opcode == 4 || opcode == 10);
+    if (!(opcode == 2 || opcode == 3 || opcode == 4 || opcode == 10)) {
+        perror("the opcode entered into getCarryFromALU is invalid");
+    }
 
     uint32_t regN = getBits(19, 16, instr);
     uint32_t op1 = regFile[regN];
@@ -469,7 +482,9 @@ void singleDataTransfer(uint32_t instr) {
         if (immBit != 0) {
             // Get Rm (offset register)
             uint32_t offsetReg = getBits(3, 0, instr);
-            assert (offsetReg != baseReg);
+            if (offsetReg == baseReg) {
+                perror("offsetReg cannot be equal to baseReg in SDT instr");
+            }
         }
         if (loadStoreBit == 0) {
             storeData(destReg, index);
@@ -567,7 +582,9 @@ uint32_t checkCond(uint32_t cond) {
         case 13 : 
             return (checkZ() || !equalityNV());
         default : 
-            assert(cond == 14); 
+            if (cond != 14) {
+                perror("the condition entered into checkCond is not valid");
+            }
             return 1;
     } 
 }
@@ -614,8 +631,13 @@ uint32_t rotateRight(uint32_t amount, uint32_t value) {
 }
 
 void setCPSRBit(uint32_t bit, uint32_t value) {
-    assert(bit <= MS_BIT && bit >= LSCOND_BIT);
-    assert(value == 0 || value == 1);
+    if (bit > MS_BIT || bit < LSCOND_BIT) {
+        perror("the bit to be set is not valid in setCPSRBit");
+    }
+    
+    if (!(value == 0 || value == 1)) {
+        perror("the value to be set is not 1 or 0 in setCPSRBit");
+    }
    
     // create a pointer to the CPSR register.
     uint32_t *CPSRreg = regFile + CPSR;
@@ -653,7 +675,10 @@ uint32_t switchEndian(uint32_t num) {
 }  
 
 uint32_t getBits(uint32_t leftmost, uint32_t rightmost, uint32_t num) {
-    assert(leftmost >= rightmost);
+    if (leftmost < rightmost) {
+        perror("Leftmost bit is bigger than rightmost bit in getBits function");
+    }
+
     uint32_t mask = createMask(leftmost, rightmost);  
     num &= mask;
     num >>= rightmost;
@@ -661,6 +686,9 @@ uint32_t getBits(uint32_t leftmost, uint32_t rightmost, uint32_t num) {
 }
 
 uint32_t createMask(uint32_t top, uint32_t bot) {
+    if (top < bot) {
+        perror("Leftmost bit is bigger than rightmost bit in createMask function");
+    }
     uint32_t difference = top - bot;
 
     uint32_t mask = (1 << (difference + 1)) - 1;

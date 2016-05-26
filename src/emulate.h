@@ -29,10 +29,6 @@
 #define SHFT_REG_CONST_MS_BIT 11
 #define SHFT_REG_CONST_LS_BIT 7
 
-// Created a global pointer to access main memory and reg file
-static uint8_t *mainMem = NULL;
-static uint32_t *regFile = NULL;
-
 struct state {
     uint32_t decoded;
     uint32_t fetched;
