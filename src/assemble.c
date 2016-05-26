@@ -422,6 +422,22 @@ void setRn(struct dpi *ins, char *str) {
     ins-> rn = s;
 }
 
+int getOffset(char *str) {
+    char *reg;
+    int ope2;
+
+    reg = strtok_r(str, ",", &str);
+    ope2 = getVal(reg);
+
+    int shift;
+    if (*str != '\0') {
+        shift = evaluateShiftedReg(str);
+        shift <<= 4;
+        ope2 |= shift;
+    }
+    return ope2;
+}
+
 int getImmOp(int ope2) {
     unsigned int lsBitIndex = 0;
     unsigned int op2 = ope2;
@@ -460,17 +476,7 @@ void setIflagAndOper(struct dpi *ins, char *str) {
             break;
         case 'r':
             ins->i = 0;
-            char *reg;
-            reg = strtok_r(str, ",", &str);
-            ope2 = getVal(reg); 
-           
-            int shift;
-            if (*str != '\0') {
-                shift = evaluateShiftedReg(str);
-                shift <<= 4;
-                ope2 |= shift;
-            }
-
+            ope2 = getOffset(str);
             ins->operand = ope2;
             break;
         default:
@@ -488,8 +494,8 @@ int checkLShift(char *type) {
             // lsr: Set bits 6,5 to 01(1)
             return 1;
         default:
-            perror("checkLShift function argument invalid");
-            break;
+            fprintf(stderr, "checkLShift function argument invalid\n");
+            exit(1);
         }
 }
 
@@ -513,7 +519,8 @@ int checkShiftKind(char *kind) {
             num <<= 3;
             return num;
         default:
-            perror("checkShiftKind function argument invalid");
+            fprintf(stderr, "checkShiftKind function argument invalid\n");
+            exit(1);
         }
 }
 
@@ -531,7 +538,8 @@ int checkShiftType(char *type) {
             // Set bits 6,5 to 11(3)
             return 3;
         default:
-            perror("checkShiftType function argument invalid");
+            fprintf(stderr, "checkShiftType function argument invalid\n");
+            exit(1);
         }
 }
 
@@ -618,14 +626,14 @@ void helpParseRnRmU(struct sdti *ins, char *express) {
         case '-':
             ins->i = 1;
             ins->u = 0;
-            //do later for shriting
-            ins-> offs = getVal(test+1);
+            //do later for shifting
+            ins-> offs = getOffset(test+1);
             break;
         case 'r':
             ins->i = 1;
             //do later for shifting
             ins->u = 1;
-            ins->offs = getVal(test);
+            ins->offs = getOffset(test);
 
             break;
         default:
@@ -634,23 +642,21 @@ void helpParseRnRmU(struct sdti *ins, char *express) {
     }
 }
 
-void parseRnRmU(struct sdti *ins, char *rn, char *express, char *test) {
+void parseRnRmU(struct sdti *ins, char *rn, char *express) {
 
     ins->rn = getVal(rn+1);
     if (express == NULL) {
-        if (*test == '\0') {
-            ins->p = 1;
-            ins->u = 1;
-            ins->offs = 0;
-            ins->i = 0;
-            return;
-        }
+        ins->p = 1;
+        ins->u = 1;
+        ins->offs = 0;
+        ins->i = 0;
+        return;
     }
-
+    
     switch(isSquare(rn)) {
         case 1:
             ins->p = 0;
-            helpParseRnRmU(ins, test);
+            helpParseRnRmU(ins, express);
             break;
         case 0:
             ins->p = 1;
@@ -743,7 +749,7 @@ struct sdti *sdtiConvert(char *str) {
                     ldrExpress(ins, rnOrExp, rd);
                     break;
                 case '[':
-                    parseRnRmU(ins, rnOrExp, express, test);
+                    parseRnRmU(ins, rnOrExp, express);
                     break;
                 default:
                     fprintf(stderr, "not a valid rn");
@@ -752,13 +758,12 @@ struct sdti *sdtiConvert(char *str) {
             break;
         case 's':
             ins->l = 0;
-            parseRnRmU(ins, rnOrExp, express, test);
+            parseRnRmU(ins, rnOrExp, express);
             break;
         default:
             fprintf(stderr, "it's not a sdti ins\n");
             exit(1);
     }
-
 
     return ins;
 }
