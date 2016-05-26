@@ -12,26 +12,26 @@ struct ldr *list[MAXX];
 int main(int argc, char **argv) {
     //create a symbol table
     setup();
-    
+
     FILE *inFile;
     inFile    = fopen(argv[1], "r");
     outFile   = fopen(argv[2], "wb+");
     char lineBuffer[MAX_LINE];
-    
+
     if (inFile == NULL) {
         exit(EXIT_FAILURE);
     }
-    
+
     while (fgets(lineBuffer, MAX_LINE, inFile)) {
         if(strlen(lineBuffer) != 1){
             writer(lineBuffer, outFile);
         }
     }
-    
+
     free(hashMap);
-    
+
     forwardRefrence();
-    
+
     if(numLdr) {
         int i;
         for(i = 0; i < numLdr; ++i) {
@@ -40,17 +40,17 @@ int main(int argc, char **argv) {
             int pc = list[i]->pc;
             int offset = (PC - (pc + 2)) * 4;
             list[i]->ins->offs = offset;
-            
+
             fseek(outFile, (pc-1)*4, SEEK_SET);
             sdtiToBin(list[i]->ins, outFile);
             fseek(outFile, 0, SEEK_END);
-            
+
         }
     }
-    
+
     fclose(outFile);
     fclose(inFile);
-    
+
     return 0;
 }
 
@@ -75,7 +75,7 @@ void writer(char *str, FILE *outFile) {
         char *test = str;
         char *copy = strdup(test);
         Ins type = typeId(strtok_r(copy, " ", &copy));
-        
+
         switch (type) {
             case 1:
                 parseDpi(test, outFile);
@@ -100,13 +100,13 @@ void writer(char *str, FILE *outFile) {
                 fprintf(stderr, "unidentify command\n");
                 exit(1);
         }
-        
+
     } else {
         char *test = str;
         removeChar(test, ':');
         char *defn = (char *) malloc(sizeof(char));
         sprintf(defn, "%d", PC+1);
-        
+
         put(test, defn);
     }
 }
@@ -114,23 +114,23 @@ void writer(char *str, FILE *outFile) {
 int getBinaryVal(char *opcode) {
     char *str = lookup(opcode)->defn;
     int q = (int) strtol(str, (char **) NULL, 2);
-    
+
     return q;
 }
 
 void biToBin(struct bi *ins, FILE *file) {
     unsigned char *start;
     start = (unsigned char *) calloc(4, sizeof(unsigned char));
-    
+
     *start |= (ins->cond) << 4;
     *start |= (ins->id);
-    
+
     *(start+1) |= (ins->offset) >> 16;
-    
+
     *(start+2) |= (ins->offset) >> 8;
-    
+
     *(start+3) |= (ins->offset);
-    
+
     endianConvert(start);
     fwrite(start, sizeof(unsigned char), 4, file);
     free(start);
@@ -139,11 +139,11 @@ void biToBin(struct bi *ins, FILE *file) {
 struct bi *biConvert(char *str) {
     char *test = str;
     struct bi *ins = (struct bi*) malloc (sizeof(struct bi));
-    
+
     char *opcode, *express;
-    
+
     opcode = strtok_r(test, " ", &test);
-    
+
     int opc = getOpVal(opcode);
     ins->cond = opc;
     ins->id = 10;
@@ -160,7 +160,7 @@ struct bi *biConvert(char *str) {
             fprintf(stderr, "not invalid address field\n");
             exit(1);
     }
-    
+
     return ins;
 }
 
@@ -175,9 +175,9 @@ void calOffset(struct bi *ins, char *label) {
         query = lookup(label);
         char *str = query->defn;
         int lineNumber = (int) strtol(str, (char **) NULL, 10);
-        
+
         int negative = lineNumber - (PC + 2);
-        
+
         if(negative >= 0) {
             fprintf(stderr, "not a backward reference");
         }
@@ -191,28 +191,28 @@ void calOffset(struct bi *ins, char *label) {
         strcpy(src, label); //really buggy god gives me intuition
         fr->location = PC;
         fr->label = src;
-        
+
         lst[numfr] = fr;
         ++numfr;
     }
-    
+
     free(query);
-    
+
 }
 
 void parseBi(char *lineBuffer, FILE *outFile) {
     struct bi *ins = (struct bi*) malloc(sizeof(struct bi));
     isEnoughSpace(ins);
-    
+
     ins = biConvert(lineBuffer);
     biToBin(ins, outFile);
-    
+
     free(ins);
 }
 
 void parseSi(char *lineBuffer, FILE *outFile) {
     switch(*lineBuffer) {
-            
+
             unsigned char *instr;
         case 'a':
             instr = (unsigned char*) calloc(4, sizeof(unsigned char));
@@ -233,10 +233,10 @@ void parseSi(char *lineBuffer, FILE *outFile) {
 void parselsli(char *lineBuffer, FILE *outFile) {
     struct lsli *ins = (struct lsli*) malloc(sizeof(struct lsli));
     isEnoughSpace(ins);
-    
+
     ins = lsliConvert(lineBuffer);
     lsliToBin(ins, outFile);
-    
+
     free(ins);
 }
 
@@ -245,7 +245,7 @@ struct lsli *lsliConvert(char *str) {
     char *rn, *expr;
     struct lsli *ins = (struct lsli*) malloc(sizeof(struct lsli));
     isEnoughSpace(ins);
-    
+
     strtok_r(test, " ", &test);
     rn = strtok_r(test, ",", &test);
     ins->cond = 14;
@@ -257,14 +257,14 @@ struct lsli *lsliConvert(char *str) {
     int s = getVal(rn);
     ins->rd = s;
     expr = strtok_r(test, " ", &test);
-    
+
     int exprNum = (*(expr+2) == 'x') ?
     (int) strtol(expr + 1, NULL, 16) : getVal(expr);
-    
+
     exprNum <<= 7;
     exprNum  |= ins->rd;
     ins->operand = exprNum;
-    
+
     return ins;
 }
 
@@ -272,21 +272,21 @@ void lsliToBin(struct lsli *ins, FILE *file) {
     unsigned char *start;
     start = (unsigned char*) calloc(4, sizeof(unsigned char));
     isEnoughSpace(start);
-    
+
     *start |= ins->cond << 4;
     *start |= ins->iden << 2;
     *start |= ins->i << 1;
     *start |= ins->opcode >> 3;
-    
+
     *(start+1) |= (ins->opcode << 1) << 4;
     *(start+1) |= ins->s << 4;
     *(start+1) |= ins->rn;
-    
+
     *(start+2) |= ins->rd << 4;
     *(start+2) |= ins->operand >> 8;
-    
+
     *(start+3) |= ins->operand;
-    
+
     endianConvert(start);
     fwrite(start, sizeof(unsigned char), 4, file);
     free(start);
@@ -295,10 +295,10 @@ void lsliToBin(struct lsli *ins, FILE *file) {
 void parseMi(char *lineBuffer, FILE *outFile) {
     struct mi *ins = (struct mi*) malloc(sizeof(struct mi));
     isEnoughSpace(ins);
-    
+
     ins = miConvert(lineBuffer);
     miToBin(ins, outFile);
-    
+
     free(ins);
 }
 
@@ -307,13 +307,13 @@ struct mi *miConvert(char *str) {
     char *opcode, *rd, *rn, *rs, *rm;
     struct mi *ins = (struct mi*) malloc(sizeof(struct mi));
     isEnoughSpace(ins);
-    
+
     opcode = strtok_r(test, " ", &test);
     ins->cond = 14;
     ins->s = 0;  //TODO such a big bug
     ins->id1 = 0;
     ins->id2 = 9;
-    
+
     switch(*(opcode+1)) {
         case 'u':
             ins->a = 0;
@@ -324,7 +324,7 @@ struct mi *miConvert(char *str) {
             ins->rd = getVal(rd);
             ins->rm = getVal(rm);
             ins->rs = getVal(rs);
-            
+
             break;
         case 'l':
             ins->a = 1;
@@ -332,20 +332,20 @@ struct mi *miConvert(char *str) {
             rm = strtok_r(test, ",", &test);
             rs = strtok_r(test, ",", &test);
             rn = strtok_r(test, ",", &test);
-            
+
             ins->rd = getVal(rd);
             ins->rm = getVal(rm);
             ins->rs = getVal(rs);
             ins->rn = getVal(rn);
-            
+
             break;
         default:
             fprintf(stderr, "Something is wrong\n");
             exit(1);
     }
-    
+
     return ins;
-    
+
 }
 
 int getVal(char *str) {
@@ -355,33 +355,33 @@ int getVal(char *str) {
 void miToBin(struct mi *ins, FILE *file) {
     unsigned char *start;
     start = (unsigned char *) calloc(4, sizeof(unsigned char));
-    
+
     *start |= (ins->cond) << 4;
-    
+
     *(start+1) |= (ins->a) << 5;
     *(start+1) |= (ins->s) << 4;
     *(start+1) |= ins->rd;
-    
+
     *(start+2) |= (ins->rn) << 4;
     *(start+2) |= ins->rs;
-    
+
     *(start+3) |= (ins->id2) << 4;
     *(start+3) |= ins->rm;
-    
-    
+
+
     endianConvert(start);
     fwrite(start, sizeof(unsigned char), 4, file);
-    
+
     free(start);
 }
 
 void parseDpi(char *lineBuffer, FILE *outFile) {
     struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
     isEnoughSpace(ins);
-    
+
     ins = dpiConvert(lineBuffer);
     dpiToBin(ins, outFile);
-    
+
     free(ins);
 }
 
@@ -390,16 +390,16 @@ struct dpi *dpiConvert(char *str) {
     char *opcode, *rd, *rn, *op2;
     struct dpi *ins = (struct dpi*) malloc(sizeof(struct dpi));
     isEnoughSpace(ins);
-    
+
     opcode = strtok_r(test, " ", &test);
-    
+
     int opc     = getOpVal(opcode);
     ins->opcode = opc;
     ins->s = 0;
     ins->cond = 14;
-    
+
     removeChar(test, ' ');
-    
+
     switch (opc) {
         case 13: //mov ->  mov Rd, <Operand2>
             ins->rn = 0;
@@ -407,7 +407,7 @@ struct dpi *dpiConvert(char *str) {
             op2 = strtok_r(test, " ", &test);
             setIflagAndOper(ins, op2);
             setRd(ins, rd);
-            
+
             break;
         case 8: //tst
             ins->rd = 0;
@@ -441,14 +441,14 @@ struct dpi *dpiConvert(char *str) {
             setRd(ins, rd);
             break;
     }
-    
+
     return ins;
 }
 
 int getOpVal(char *opcode) {
     char *str = lookup(opcode)->defn;
     int q = (int) strtol(str, (char **) NULL, 2);
-    
+
     return q;
 }
 
@@ -488,7 +488,7 @@ int getImmOp(int ope2) {
     if (lsBitIndex % 2 != 0) {
         lsBitIndex--;
     }
-    
+
     unsigned int rotationAmount = (32 - lsBitIndex) >> 1;
     rotationAmount <<= 8;
     unsigned int immValue
@@ -502,13 +502,13 @@ void setIflagAndOper(struct dpi *ins, char *str) {
     switch (str[0]) {
         case '#':
             ins->i = 1;
-            
+
             if(*(str+2) == 'x') {
                 ope2 = (int) strtol(str+1, (char **) NULL, 16);
             } else {
                 ope2 = (int) strtol(str+1, (char **) NULL, 10);
             }
-            
+
             if (ope2 > 255) {
                 ope2 = getImmOp(ope2);
             }
@@ -586,17 +586,17 @@ int checkShiftType(char *type) {
 int evaluateShiftedReg(char *string) {
     char shiftType[4];
     strncpy(shiftType, string, 3);
-    
+
     int type = checkShiftType(shiftType);
-    
+
     string += 3;
     int kind = checkShiftKind(string);
-    
+
     // Shifting type to include it with the kind
     type <<= 1;
     int result;
     result = kind | type;
-    
+
     return result;
 }
 
@@ -605,30 +605,30 @@ void dpiToBin(struct dpi *ins, FILE *file) {
     unsigned char *start;
     start =(unsigned char *) calloc(4, sizeof(unsigned char));
     isEnoughSpace(start);
-    
+
     *start |= ins -> cond << 4;
     *start |= ins -> iden << 2;
     *start |= ins -> i << 1;
     *start |= ins -> opcode >> 3;
-    
+
     *(start+1) |= (ins->opcode << 1) << 4;
     *(start+1) |= ins->s << 4;
     *(start+1) |= ins->rn;
-    
+
     *(start+2) |= ins->rd << 4;
     *(start+2) |= ins->operand >> 8;
-    
-    
+
+
     *(start+3) |= ins->operand;
-    
+
     endianConvert(start);
     fwrite(start, sizeof(unsigned char), 4, file);
-    
+
     free(start);
 }
 
 void removeChar(char *str, char garbage) {
-    
+
     char *src, *dst;
     for (src = dst = str; *src != '\0'; src++) {
         *dst = *src;
@@ -644,24 +644,21 @@ int isSquare(char *str) {
             return 1;
         }
     }
-    
+
     return 0;
 }
 
 void helpParseRnRmU(struct sdti *ins, char *express) {
     char *test = express;
-    
+
     switch(*test) {
         case '#' :
             ins->i = 0;
-            if(*(test+1) == '-') {
-                ins->u = 0;
-                ins->offs = getVal(test+1);
-            } else {
-                ins->u = 1;
-                ins->offs = getVal(test);
-            }
-            
+            ins->u = (*(test+1) == '-') ? 0 : 1;
+            removeChar(test, '-');
+            int offs = (*(test+2) == 'x') ?
+                (int) strtol(test + 1, NULL, 16) : getVal(test);
+            ins->offs = offs;
             break;
         case '-':
             ins->i = 1;
@@ -672,7 +669,7 @@ void helpParseRnRmU(struct sdti *ins, char *express) {
             ins->i = 1;
             ins->u = 1;
             ins->offs = getOffset(test);
-            
+
             break;
         default:
             fprintf(stderr, "not a shifted register\n");
@@ -681,7 +678,7 @@ void helpParseRnRmU(struct sdti *ins, char *express) {
 }
 
 void parseRnRmU(struct sdti *ins, char *rn, char *express) {
-    
+
     ins->rn = getVal(rn+1);
     if (express == NULL) {
         ins->p = 1;
@@ -690,7 +687,7 @@ void parseRnRmU(struct sdti *ins, char *rn, char *express) {
         ins->i = 0;
         return;
     }
-    
+
     switch(isSquare(rn)) {
         case 1:
             ins->p = 0;
@@ -709,23 +706,23 @@ void parseRnRmU(struct sdti *ins, char *rn, char *express) {
 void sdtiToBin(struct sdti *ins, FILE *file) {
     unsigned char *start;
     start = (unsigned char *) calloc(4, sizeof(unsigned char));
-    
-    
+
+
     *start |= (ins->cond) << 4;
     *start |= (ins->id)   << 2;
     *start |= (ins->i)    << 1;
     *start |= (ins->p);
-    
+
     *(start+1) |= (ins->u) << 7;
     *(start+1) |= (ins->id2) << 5;
     *(start+1) |= (ins->l) << 4;
     *(start+1) |= (ins->rn);
-    
+
     *(start+2) |= (ins->rd) << 4;
     *(start+2) |= (ins->offs) >> 8;
-    
+
     *(start+3) |= ins->offs;
-    
+
     endianConvert(start);
     fwrite(start, sizeof(unsigned char), 4, file);
     free(start);
@@ -746,7 +743,7 @@ void ldrExpress(struct sdti *ins, char *str, char *rn) {
     s = "0xFF";
     int compare = (int) strtol(s, NULL, 16);
     int value = (int) strtol(str+1, NULL, 16);
-    
+
     if(value <= compare) {
         *str = '#';
         char *lineBuffer = combine(rn, str);
@@ -767,7 +764,7 @@ void ldrExpress(struct sdti *ins, char *str, char *rn) {
         info->ins = dst;
         list[numLdr] = info;
         numLdr++;
-        
+
         //helpPrint(ins);
     }
 }
@@ -775,21 +772,21 @@ void ldrExpress(struct sdti *ins, char *str, char *rn) {
 struct sdti *sdtiConvert(char *str) {
     char *test = str;
     struct sdti *ins = (struct sdti*) malloc(sizeof(struct sdti));
-    
+
     char *opcode, *rd, *express;
     char *rnOrExp;
-    
+
     opcode  = strtok_r(test, " ", &test); //str
     removeChar(test, ' ');
     rd      = strtok_r(test, ",", &test); //r0
     rnOrExp = strtok_r(test, ",", &test); //[r1, or [r2]
     express = strtok_r(test, "]", &test); //r4
-    
+
     ins->cond = 14;
     ins->id = 1;
     ins->id2 = 0;
     ins->rd = getVal(rd);
-    
+
     switch (*(opcode)) {
         case 'l':
             ins->l = 1;
@@ -813,14 +810,14 @@ struct sdti *sdtiConvert(char *str) {
             fprintf(stderr, "it's not a sdti ins\n");
             exit(1);
     }
-    
-    
+
+
     return ins;
 }
 
 void parseSdti(char *lineBuffer, FILE *outFile) {
     struct sdti *ins = (struct sdti*) malloc(sizeof(struct sdti));
-    
+
     ins = sdtiConvert(lineBuffer);
     if(IsError) {
         IsError = 0;
@@ -832,21 +829,21 @@ void parseSdti(char *lineBuffer, FILE *outFile) {
 
 unsigned int hash(char *s) {
     unsigned int hashval;
-    
+
     for (hashval = 0; *s != '\0'; s++) {
         hashval = *s + 31 * hashval;
     }
-    
+
     return hashval % HASH_SIZE;
 }
 
 unsigned int hashTwo(char *s) {
     unsigned int hashval;
-    
+
     for (hashval = 0; *s != '\0'; s++) {
         hashval = *s + 5 * hashval;
     }
-    
+
     return hashval % NUM_INS;
 }
 
@@ -857,30 +854,30 @@ struct elem *find(char *s) {
             return np;
         }
     }
-    
+
     return NULL;
 }
 
 struct elem *install(char *name, Ins defn) {
     struct elem *np;
     unsigned int hashval;
-    
+
     if ((np = find(name)) == NULL) {
         np = (struct elem *) malloc(sizeof(*np));
         if (np == NULL || (np->name = strdup(name)) == NULL) {
             return NULL;
         }
-        
+
         hashval = hashTwo(name);
         np->next = hashMap[hashval];
         hashMap[hashval] = np;
     } else {
         free((void *) np->defn);
     }
-    
+
     np->defn = defn;
-    
-    
+
+
     return np;
 }
 
@@ -891,37 +888,37 @@ struct entry *lookup(char *s) {
             return np;
         }
     }
-    
+
     return NULL;
 }
 
 struct entry *put(char *name, char *defn) {
     struct entry *np;
     unsigned int hashval;
-    
+
     if ((np = lookup(name)) == NULL) {
         np = (struct entry *) malloc(sizeof(*np));
         if (np == NULL || (np->name = strdup(name)) == NULL) {
             return NULL;
         }
-        
+
         hashval = hash(name);
         np->next = hashTable[hashval];
         hashTable[hashval] = np;
     } else {
         free((void *) np->defn);
     }
-    
+
     if ((np->defn = strdup(defn)) == NULL) {
         return NULL;
     }
-    
+
     return np;
 }
 
 void setup() {
     hashMap = (struct elem **) calloc(NUM_INS, sizeof(struct elem *));
-    
+
     put("and", "0000");
     put("eor", "0001");
     put("sub", "0010");
@@ -955,9 +952,9 @@ void setup() {
     install("bgt",BGT);
     install("lsl",LSL);
     install("andeq",ANDEQ);
-    
+
     //condition code
-    
+
     put("beq", "0000");
     put("bne", "0001");
     put("bge", "1010");
@@ -965,7 +962,7 @@ void setup() {
     put("bgt", "1100");
     put("ble", "1101");
     put("b", "1110");
-    
+
 }
 
 void isEnoughSpace(void *ip) {
@@ -1011,7 +1008,7 @@ int getBits(int leftmost, int rightmost, int num) {
     if (leftmost < rightmost) {
         perror("The arguments to getBits function are invalid");
     }
-    
+
     int mask = createMask(leftmost, rightmost);
     num &= mask;
     num >>= rightmost;
@@ -1022,7 +1019,7 @@ int createMask(int top, int bot) {
     if (top < bot) {
         perror("The arguments to createMask function are invalid");
     }
-    
+
     int difference = top - bot;
     int mask = (1 << (difference + 1)) - 1;
     mask <<= bot;
