@@ -1,30 +1,134 @@
-\documentclass[11pt]{article}
+\documentclass{article}
+\usepackage[english]{babel}
 
-\usepackage{fullpage}
+%%%%%%%%%% Start TeXmacs macros
+\newenvironment{itemizeminus}{\begin{itemize} \renewcommand{\labelitemi}{$-$}\renewcommand{\labelitemii}{$-$}\renewcommand{\labelitemiii}{$-$}\renewcommand{\labelitemiv}{$-$}}{\end{itemize}}
+%%%%%%%%%% End TeXmacs macros
 
 \begin{document}
 
-\title{ARM Checkpoint... }
-\author{TODO}
-
+\title{ARM Checkpoint }
+\author{}
 \maketitle
 
 \section{Group Organisation}
 
-Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor
-incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis
-nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu
-fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
-culpa qui officia deserunt mollit anim id est laborum.
+We split the workload so that three of us would write the emulator and one
+would write the assembler because we assumed that the emulator part would take
+longer. The initial split was as follows:
+
+Chris:
+\begin{itemizeminus}
+  \item Main pipeline
+  
+  \item Multiply
+\end{itemizeminus}
+\ \ \ \ Jixi:
+\begin{itemizeminus}
+  \item Single data transfer
+  
+  \item Shifted register for data processing
+\end{itemizeminus}
+\ \ \ \ Ryan:
+\begin{itemizeminus}
+  \item Rest of data processing
+  
+  \item Branch
+\end{itemizeminus}
+\ \ \ \ Shuhao:
+\begin{itemizeminus}
+  \item Assembler (part II)
+\end{itemizeminus}
+We also introduced a "to do" list so that after completing our initial splits,
+we could pick out tasks from this list that needed to be done and implement
+them.
+
+For the emulator, the implementation strategy was very successful as we had
+clear goals in what we needed to implement. As the group that coded the
+emulator part was bigger, naturally, we finished part I earlier than part II.
+
+The transition to part II was not too difficult as the team member
+implementing the assembler part had written a grand design for the other
+members to follow. This code however had few comments and so time was wasted
+trying to decipher the code that was written. In hindsight, having comments in
+the part II code earlier on would have helped the emulator group understand
+the code faster and would have increased productivity.
+
+We believe that using three members to implement part I was a good strategy as
+every member of the sub-team had a task to do. Had we used all four members,
+the workload could not have been distributed evenly amongst the members and
+not every member could contribute to the work effort.
 
 \section{Implementation Strategies}
 
-Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor
-incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis
-nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu
-fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in
-culpa qui officia deserunt mollit anim id est laborum.
+In our design, we used global variable pointers to represent the main memory
+and register file. We decided to use global variables (even though it is
+usually bad practice as it is error prone) because we needed to access these
+locations in many functions. Therefore, global pointers were used so that we
+did not have to carry the pointers as function arguments which cluttered the
+code. This made the code more readable and allowed for easy access to the main
+memory and the register file. Clearly there is a trade-off between using
+global variables and passing the pointers as arguments to functions and we
+decided that there were more positives than negatives using global variables.
+
+After consulting with the supervisors and course leader, we were advised to
+change as many magic numbers into macros as possible through the \#define
+declaration. Although we followed the advice given, we believe that this made
+the code less readable and actually cluttered the code despite changing the
+magic numbers into descriptive names. Avoiding magic numbers was simply
+unavoidable in this exercise and so we have added as many comments as possible
+to guide the readability of the code.
+
+At the beginning of the project, the importance of code style was stressed.
+Another thing that our team strived to do was to name functions and variables
+appropriately. This, along with the rare use of type casting allowed for good
+clarity of code. With every compilation of code, we used the flags -Wall,
+-Werror and -pedantic. This ensured that our code compiled with no warnings as
+the code would not compile (warnings would be converted to errors). We also
+littered the code with useful comments that hopefully help the reader to
+understand the code. All variables were also initialised to some value before
+being used to avoid undefined behaviour. Curly brackets were used for every
+control statement - even for single-command control statements.
+
+We moved all function declarations into the emulate.h file and moved all
+function definitions into the emulate.c file. The emulate.c file is ordered
+with respect to the function declarations of emulate.h. Every effort was made
+to ensure that the code style was consistent and that we had proper
+indentation and consistent spaces (for example between brackets).
+
+At first, we used assertions to handle errors. After a while however, we
+realised that using if statements and using perror to print out an error was
+more effective and so we adopted this use of error handling. The perror
+statements are used every time a case was entered where it should not have
+been. The -std=c99 was also used in compilation to ensure that we used ISO C99
+and not ANSI C89. On top of this, if a function took no arguments, we used
+void as a parameter of the function.
+
+For the single data transfer instruction, we hit a stumbling block when
+planning the implementation of the function. The function required the
+checking of many conditions in the instruction, and a lot of thought went
+behind reducing the number of if statements in the function. This problem was
+overcome by using many helper functions to distinguish between the complicated
+if statements.
+
+Without realising we had made a mistake, we implemented the main memory to be
+word (32-bits) addressable as opposed to byte (8-bits) addressable. When
+testing the single data transfer instruction, we came to a realisation that
+the function required an unaligned word access to the main memory which was
+not possible with our implementation. After careful inspection of the
+specification, we had a light-bulb moment that the main memory should have
+been byte addressable and we were able to change our code to meet the
+specification without having to change too much code.
+
+We realised we could reuse certain utility functions from part I to part II -
+namely createMask, getBits and switchEndian and this reduced code duplication
+between the two parts.
+
+We have just completed assembler (part II) and will be moving on to part III.
+As a team, the biggest problem we will face in later tasks is thinking about
+how we will split the workload amongst the team and how we will approach our
+extension task once we come up with an extension idea. To try and resolve
+these problems we will need to spend more time planning our individual
+participations and comment our code effectively.
 
 \end{document}
