@@ -100,9 +100,6 @@ struct bi {
     unsigned int offset: 24;
 };
 
-int switchEndian(int num);
-
-
 //grand design
 void writer(char *, FILE *);
 
@@ -184,7 +181,3 @@ void overWriteFile(FILE *, int , int *);
 void forwardRefrence();
 int getBits(int leftmost, int rightmost, int num);
 int createMask(int top, int bot);
-
-
-
-void helpPrint(struct sdti *);
