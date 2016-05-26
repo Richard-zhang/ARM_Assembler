@@ -135,6 +135,7 @@ void simulatePipeline(struct state *ARMState) {
         condReg = getBits(MS_BIT, LSCOND_BIT, ARMState->decoded);  
         if (checkCond(condReg) == 1){
             Instruction type = checkInstruction(ARMState->decoded);
+            int offset;
             switch(type) {
                 // DATA PROCESSING
                 case DP  :
@@ -148,19 +149,18 @@ void simulatePipeline(struct state *ARMState) {
                 case SDT  : 
                     singleDataTransfer(ARMState->decoded); 
                     break;  
-                // BRANCH    
-                default :
-                    if (type != BR) {
-                        perror("The type of instruction is not valid");
-                    }
-
-                    int offset = branch(ARMState->decoded); 
+                // BRANCH
+                case BR   :  
+                    offset = branch(ARMState->decoded); 
                     regFile[PC] += offset;   
                     
                     // Fetched is the instruction at PC + offset  
                     ARMState->fetched = getInteger(regFile[PC]);    
                     regFile[PC] += sizeof(int);
-                    break;   
+                    break; 
+                default :
+                    perror("The type of instruction is not valid"); 
+                    exit(EXIT_FAILURE);
             }    
         } 
         // fetched instruction becomes decoded, and new instruction is fetched
@@ -244,6 +244,7 @@ void dataProcessInstr(uint32_t instr) {
             default : 
                 perror("The opcode entered was not valid, carry\
                         not produced.");
+                exit(EXIT_FAILURE);
         }
         
         // set C flag (bit 29)
@@ -281,11 +282,11 @@ uint32_t evaluateShiftedReg(uint32_t operand) {
             return logicalRightShift(shiftAmount, shiftValue);
         case 2 : 
             return arithmeticRightShift(shiftAmount, shiftValue);
-        default: 
-            if (shiftType != 3) {
-                perror("Shift type in evaluateShiftedReg not valid");
-            }
+        case 3 :
             return rotateRight(shiftAmount, shiftValue);
+        default: 
+            perror("Shift type in evaluateShiftedReg not valid");
+            exit(EXIT_FAILURE);
     }
 }
 
@@ -324,11 +325,11 @@ uint32_t executeOpcode(uint32_t opcode, uint32_t regN, uint32_t op2) {
             return regFile[regN] + op2;
         case 12 : 
             return regFile[regN] | op2;
-        default : 
-            if (opcode != 13) {
-                perror("invalid opcode entered into executeOpCode");
-            }
+        case 13 :
             return op2;
+        default : 
+            perror("invalid opcode entered into executeOpCode");
+            exit(EXIT_FAILURE);
     } 
 }
 
@@ -584,11 +585,11 @@ uint32_t checkCond(uint32_t cond) {
             return (!checkZ() && equalityNV());
         case 13 : 
             return (checkZ() || !equalityNV());
-        default : 
-            if (cond != 14) {
-                perror("the condition entered into checkCond is not valid");
-            }
+        case 14 : 
             return 1;
+        default : 
+            perror("the condition entered into checkCond is not valid");
+            exit(EXIT_FAILURE);
     } 
 }
 
